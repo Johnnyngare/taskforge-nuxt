@@ -1,4 +1,4 @@
-<!-- components/TaskCard.vue -->
+!-- components/TaskCard.vue -->
 <template>
   <div
     class="group bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 p-6 hover:shadow-md hover:border-emerald-200 dark:hover:border-emerald-800 transition-all duration-200 cursor-pointer"
@@ -10,14 +10,12 @@
       <div class="flex items-start space-x-3 flex-1 min-w-0">
         <!-- Custom Checkbox -->
         <div class="flex-shrink-0 mt-1">
-          <input
-            :id="`task-${task.id}`"
-            v-model="isCompleted"
-            type="checkbox"
-            class="w-5 h-5 text-emerald-600 bg-gray-100 border-gray-300 rounded focus:ring-emerald-500 dark:focus:ring-emerald-600 dark:ring-offset-gray-800 focus:ring-2 dark:bg-gray-700 dark:border-gray-600 cursor-pointer"
-            @change="handleStatusChange"
-            @click.stop
-          />
+          <input :id="`task-${task._id}`"
+          v-model="isCompleted" type="checkbox" class="w-5 h-5 text-emerald-600
+          bg-gray-100 border-gray-300 rounded focus:ring-emerald-500
+          dark:focus:ring-emerald-600 dark:ring-offset-gray-800 focus:ring-2
+          dark:bg-gray-700 dark:border-gray-600 cursor-pointer"
+          @change="handleStatusChange" @click.stop />
         </div>
 
         <!-- Task Details -->
@@ -49,6 +47,7 @@
       </div>
 
       <!-- Priority Badge -->
+      <!-- Assuming TaskPriorityBadge component exists in components/task/TaskPriorityBadge.vue -->
       <TaskPriorityBadge :priority="task.priority" class="flex-shrink-0 ml-3" />
     </div>
 
@@ -58,7 +57,7 @@
       <div class="flex items-center space-x-3">
         <!-- Project -->
         <div
-          v-if="task.project"
+          v-if="task.projectId"
           class="flex items-center space-x-1 text-gray-500 dark:text-gray-400"
         >
           <svg
@@ -74,10 +73,14 @@
               d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10"
             ></path>
           </svg>
-          <span class="truncate">{{ task.project }}</span>
+          <!-- FIX: Display project name if task.project is populated (assuming it's populated/joined)
+                      Otherwise, just show the projectId (less user-friendly)
+                      For now, using projectId as it's directly from the model
+           -->
+          <span class="truncate">{{ task.projectId }}</span>
         </div>
 
-        <!-- Tags -->
+        <!-- Tags (If your TaskModel doesn't have 'tags', this will be empty) -->
         <div
           v-if="task.tags && task.tags.length > 0"
           class="flex items-center space-x-1"
@@ -174,12 +177,15 @@
     </div>
 
     <!-- Progress Bar (if task has subtasks) -->
-    <div v-if="task.subtasks && task.subtasks.length > 0" class="mt-4">
+    <!-- FIX: Check for task.checklist (from new model) not task.subtasks -->
+    <div v-if="task.checklist && task.checklist.length > 0" class="mt-4">
       <div
         class="flex items-center justify-between text-xs text-gray-500 dark:text-gray-400 mb-2"
       >
         <span>Progress</span>
-        <span>{{ completedSubtasks }}/{{ task.subtasks.length }} subtasks</span>
+        <span
+          >{{ completedChecklistItems }}/{{ task.checklist.length }} items</span
+        >
       </div>
       <div class="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-2">
         <div
@@ -192,14 +198,19 @@
 </template>
 
 <script setup>
+import { ref, computed, watch } from "vue"; // Ensure all needed APIs are imported
+
 // Component props
 const props = defineProps({
   task: {
     type: Object,
     required: true,
+    // FIX: Update validator to check for MongoDB _id and title
     validator: (task) => {
       return (
-        task && typeof task.id !== "undefined" && typeof task.title === "string"
+        task &&
+        typeof task._id !== "undefined" &&
+        typeof task.title === "string"
       );
     },
   },
@@ -208,19 +219,21 @@ const props = defineProps({
 // Component emits
 const emit = defineEmits(["click", "edit", "delete", "statusChange"]);
 
-// Reactive data
-const isCompleted = ref(props.task.completed || false);
+// Reactive data for checkbox state, initialized from task.status
+// FIX: Map 'status' from MongoDB to a boolean for checkbox
+const isCompleted = ref(props.task.status === "completed");
 
-// Computed properties
-const completedSubtasks = computed(() => {
-  if (!props.task.subtasks) return 0;
-  return props.task.subtasks.filter((subtask) => subtask.completed).length;
+// Computed properties for checklist progress
+// FIX: Use task.checklist instead of task.subtasks
+const completedChecklistItems = computed(() => {
+  if (!props.task.checklist) return 0;
+  return props.task.checklist.filter((item) => item.completed).length;
 });
 
 const progressPercentage = computed(() => {
-  if (!props.task.subtasks || props.task.subtasks.length === 0) return 0;
+  if (!props.task.checklist || props.task.checklist.length === 0) return 0;
   return Math.round(
-    (completedSubtasks.value / props.task.subtasks.length) * 100
+    (completedChecklistItems.value / props.task.checklist.length) * 100
   );
 });
 
@@ -228,9 +241,12 @@ const dueDateStatus = computed(() => {
   if (!props.task.dueDate) return null;
 
   const today = new Date();
+  today.setHours(0, 0, 0, 0); // Normalize today to start of day
   const dueDate = new Date(props.task.dueDate);
-  const diffTime = dueDate - today;
-  const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+  dueDate.setHours(0, 0, 0, 0); // Normalize due date to start of day
+
+  const diffTime = dueDate.getTime() - today.getTime(); // Use getTime() for milliseconds
+  const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24)); // Calculate days difference
 
   if (diffDays < 0) {
     return {
@@ -255,8 +271,14 @@ const dueDateStatus = computed(() => {
       class: "bg-blue-100 text-blue-800 dark:bg-blue-900/20 dark:text-blue-400",
     };
   } else {
+    // FIX: Format date correctly. toLocaleDateString might be too verbose.
+    // Consider a custom date formatter for consistency.
     return {
-      text: dueDate.toLocaleDateString(),
+      text: new Date(props.task.dueDate).toLocaleDateString("en-US", {
+        month: "short",
+        day: "numeric",
+        year: "numeric",
+      }),
       class: "bg-gray-100 text-gray-600 dark:bg-gray-700 dark:text-gray-300",
     };
   }
@@ -264,17 +286,19 @@ const dueDateStatus = computed(() => {
 
 // Methods
 const handleStatusChange = () => {
+  // FIX: Emit task._id and the new status
   emit("statusChange", {
-    taskId: props.task.id,
-    completed: isCompleted.value,
+    taskId: props.task._id,
+    completed: isCompleted.value, // Pass the boolean for completion
   });
 };
 
 // Watch for external changes to task completion status
+// FIX: Watch props.task.status directly (from MongoDB 'pending'/'completed')
 watch(
-  () => props.task.completed,
-  (newValue) => {
-    isCompleted.value = newValue;
+  () => props.task.status,
+  (newStatus) => {
+    isCompleted.value = newStatus === "completed";
   }
 );
 </script>

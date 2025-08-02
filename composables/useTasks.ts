@@ -1,75 +1,73 @@
-// file: composables/useTasks.ts
-import { ref } from "vue"; // Make sure ref is imported
+// composables/useTasks.ts
+import { ref } from "vue"; // You might need this explicit import if not auto-imported
 
-export const useTasks = async () => {
-  // Make it async
-  const data = ref([]);
-  const pending = ref(true); // Default to true while fetching
-  const error = ref(null);
+export const useTasks = () => {
+  // useFetch runs immediately and provides reactive refs
+  const {
+    data: tasks, // tasks ref holds the data (array of ITask)
+    pending, // pending ref indicates loading status
+    error, // error ref holds any fetch error
+    refresh, // refresh function to re-trigger the fetch
+  } = useFetch<ITask[]>("/api/tasks", {
+    // <ITask[]> for type safety
+    default: () => [], // CRUCIAL: ensures tasks.value is always an array
+  });
 
-  const fetchData = async () => {
-    pending.value = true;
-    error.value = null;
+  // Function to create a new task
+  const createTask = async (taskData: Partial<ITask>) => {
+    // Use Partial<ITask> for input data
     try {
-      await new Promise((resolve) => setTimeout(resolve, 1000)); // Simulate delay
-      data.value = [
-        // ... your mock task data ...
-        {
-          id: 1,
-          title: "Learn Nuxt 3 Composables",
-          description: "Deep dive into useAsyncData and useFetch.",
-          priority: "High",
-          dueDate: "2025-08-10",
-          completed: false,
-        },
-        {
-          id: 2,
-          title: "Set up Tailwind Dark Mode",
-          description: "Integrate @nuxtjs/color-mode.",
-          priority: "Medium",
-          dueDate: "2025-08-05",
-          completed: true,
-        },
-        {
-          id: 3,
-          title: "Refactor TaskCard component",
-          description: "Add more details and actions.",
-          priority: "Low",
-          dueDate: "2025-08-15",
-          completed: false,
-        },
-        {
-          id: 4,
-          title: "Create login page UI",
-          description: "Design form and integrate auth composable.",
-          priority: "High",
-          dueDate: "2025-08-03",
-          completed: false,
-        },
-        {
-          id: 5,
-          title: "Implement search functionality",
-          description: "Add search bar to header and filter tasks.",
-          priority: "Medium",
-          dueDate: "2025-08-20",
-          completed: false,
-        },
-      ];
+      await $fetch("/api/tasks", { method: "POST", body: taskData });
+      refresh(); // Re-fetch all tasks to update the UI
     } catch (e) {
-      error.value = e;
-      data.value = [];
-    } finally {
-      pending.value = false;
+      console.error("Error creating task:", e);
+      // Implement UI feedback for error (e.g., a toast notification)
+      throw e; // Re-throw to allow component to catch if needed
     }
   };
 
-  // *** THIS IS THE CRUCIAL CHANGE: Call fetchData immediately ***
-  await fetchData(); // Await the initial fetch
+  // Function to update an existing task
+  const updateTask = async (id: string, updates: Partial<ITask>) => {
+    try {
+      await $fetch(`/api/tasks/${id}`, { method: "PATCH", body: updates });
+      refresh(); // Re-fetch tasks to update the UI
+    } catch (e) {
+      console.error(`Error updating task ${id}:`, e);
+      throw e;
+    }
+  };
 
+  // Function to delete a task
+  const deleteTask = async (id: string) => {
+    try {
+      await $fetch(`/api/tasks/${id}`, { method: "DELETE" });
+      refresh(); // Re-fetch tasks to update the UI
+    } catch (e) {
+      console.error(`Error deleting task ${id}:`, e);
+      throw e;
+    }
+  };
+
+  // Return all reactive states and action functions
   return {
-    data,
+    tasks,
     pending,
     error,
-    refreshData: fetchData, // Rename to refreshData for clarity, as it's not just fetching initially
+    refresh, // Make sure 'refresh' is returned for external re-fetching
+    createTask,
+    updateTask,
+    deleteTask,
   };
 };
+
+// You'll need an ITask interface. Assuming it's defined like this:
+// This can go into types/task.d.ts or server/models/Task.ts if you share types.
+interface ITask {
+  _id: string; // MongoDB ObjectId
+  title: string;
+  description?: string;
+  status: "pending" | "completed";
+  dueDate?: Date;
+  projectId?: string; // Optional if not all tasks have a project
+  // Add other fields as per your TaskModel
+}
