@@ -1,145 +1,200 @@
 <template>
   <div
-    class="relative overflow-hidden bg-gradient-to-r from-emerald-600 via-emerald-500 to-teal-600 rounded-2xl shadow-xl shadow-emerald-600/25"
+    class="bg-gradient-to-r from-emerald-500 to-emerald-600 rounded-xl p-6 text-white shadow-lg"
   >
-    <!-- Decorative background pattern -->
-    <div class="absolute inset-0 bg-black/5">
-      <div class="absolute inset-0 bg-grid-pattern opacity-10"></div>
-    </div>
-
-    <!-- Floating decorative elements -->
-    <div
-      class="absolute top-4 right-4 w-32 h-32 bg-white/10 rounded-full blur-2xl"
-    ></div>
-    <div
-      class="absolute bottom-0 left-0 w-24 h-24 bg-white/5 rounded-full blur-xl"
-    ></div>
-
-    <!-- Content -->
-    <div class="relative px-8 py-8 sm:px-12 sm:py-10">
-      <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between">
-        <div class="flex-1">
-          <div class="flex items-center space-x-3 mb-3">
-            <div class="flex-shrink-0">
+    <div class="flex items-start justify-between">
+      <div class="flex-1">
+        <div class="flex items-center space-x-3 mb-2">
+          <div
+            class="w-10 h-10 bg-white/20 rounded-lg flex items-center justify-center"
+          >
+            <svg
+              class="w-6 h-6 text-white"
+              fill="none"
+              stroke="currentColor"
+              viewBox="0 0 24 24"
+            >
+              <path
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                stroke-width="2"
+                d="M13 10V3L4 14h7v7l9-11h-7z"
+              />
+            </svg>
+          </div>
+          <div>
+            <h1 class="text-2xl font-bold">Welcome Back, {{ userName }}!</h1>
+            <div class="flex items-center space-x-2 text-emerald-100">
               <div
-                class="w-12 h-12 bg-white/20 backdrop-blur-sm rounded-xl flex items-center justify-center"
-              >
-                <svg
-                  class="w-6 h-6 text-white"
-                  fill="none"
-                  stroke="currentColor"
-                  viewBox="0 0 24 24"
-                >
-                  <path
-                    stroke-linecap="round"
-                    stroke-linejoin="round"
-                    stroke-width="2"
-                    d="M13 10V3L4 14h7v7l9-11h-7z"
-                  />
-                </svg>
-              </div>
-            </div>
-            <div>
-              <h1 class="text-2xl sm:text-3xl font-bold text-white">
-                Welcome Back, {{ userName }}!
-              </h1>
-              <div class="flex items-center space-x-2 mt-1">
-                <div
-                  class="w-2 h-2 bg-green-300 rounded-full animate-pulse"
-                ></div>
-                <span class="text-emerald-100 text-sm"
-                  >Ready to be productive</span
-                >
-              </div>
+                class="w-2 h-2 bg-emerald-300 rounded-full animate-pulse"
+              ></div>
+              <span class="text-sm">Ready to be productive</span>
             </div>
           </div>
-
-          <p class="text-emerald-50 text-lg leading-relaxed max-w-2xl">
-            {{ welcomeMessage }}
-          </p>
         </div>
 
-        <!-- Quick stats -->
-        <div class="mt-6 sm:mt-0 sm:ml-8 flex-shrink-0">
-          <div class="flex space-x-6">
-            <div class="text-center">
-              <div class="text-2xl font-bold text-white">
-                {{ todayTasksCount }}
-              </div>
-              <div class="text-emerald-100 text-sm">Due Today</div>
-            </div>
-            <div class="w-px bg-white/20"></div>
-            <div class="text-center">
-              <div class="text-2xl font-bold text-white">
-                {{ overdueTasksCount }}
-              </div>
-              <div class="text-emerald-100 text-sm">Overdue</div>
-            </div>
+        <p class="text-emerald-100 text-lg">
+          {{ welcomeMessage }}
+        </p>
+      </div>
+
+      <!-- Stats -->
+      <div class="flex space-x-8 ml-6">
+        <div class="text-center">
+          <div class="text-3xl font-bold mb-1">{{ dueTodayCount }}</div>
+          <div class="text-sm text-emerald-100 font-medium">Due Today</div>
+        </div>
+        <div class="text-center">
+          <div
+            class="text-3xl font-bold mb-1 transition-colors duration-200"
+            :class="overdueCount > 0 ? 'text-red-200' : ''"
+          >
+            {{ overdueCount }}
           </div>
+          <div class="text-sm text-emerald-100 font-medium">Overdue</div>
         </div>
       </div>
     </div>
   </div>
 </template>
 
-<script setup>
-// 1. Define the 'tasks' prop to receive data from the parent (TaskProvider).
-const props = defineProps({
-  tasks: {
-    type: Array,
-    default: () => [],
-  },
+<script setup lang="ts">
+interface Task {
+  _id: string;
+  title: string;
+  description?: string;
+  completed: boolean;
+  priority?: "low" | "medium" | "high";
+  dueDate?: string | Date;
+  project?: string | { name: string; _id: string };
+  createdAt?: string | Date;
+  updatedAt?: string | Date;
+}
+
+interface User {
+  _id: string;
+  name: string;
+  email: string;
+}
+
+interface Props {
+  tasks?: Task[];
+}
+
+const props = withDefaults(defineProps<Props>(), {
+  tasks: () => [],
 });
 
-// 2. Keep useAuth() as it's for user-specific data, not task data.
-const { user } = useAuth();
+// Get user data
+const { data: user } = await useFetch<User>("/api/auth/me", {
+  default: () => ({ _id: "", name: "User", email: "" }),
+});
 
-// 3. REMOVE the redundant useTasks() call.
-// const { tasks } = useTasks(); // This is no longer needed.
-
-// Computed properties
 const userName = computed(() => user.value?.name || "User");
 
-// 4. Update computed properties to use props.tasks instead of a local 'tasks' ref.
-const todayTasksCount = computed(() => {
-  if (!props.tasks) return 0; // Guard clause for safety
-  const today = new Date().toDateString();
-  return props.tasks.filter(
-    (task) =>
-      !task.completed &&
-      task.dueDate &&
-      new Date(task.dueDate).toDateString() === today
-  ).length;
-});
-
-const overdueTasksCount = computed(() => {
-  if (!props.tasks) return 0; // Guard clause for safety
+// Helper function to get start and end of today
+const getTodayBounds = () => {
   const today = new Date();
-  today.setHours(0, 0, 0, 0); // Normalize today's date to the beginning of the day for accurate comparison
-  return props.tasks.filter(
-    (task) => !task.completed && task.dueDate && new Date(task.dueDate) < today
-  ).length;
+  const startOfToday = new Date(
+    today.getFullYear(),
+    today.getMonth(),
+    today.getDate(),
+    0,
+    0,
+    0,
+    0
+  );
+  const endOfToday = new Date(
+    today.getFullYear(),
+    today.getMonth(),
+    today.getDate(),
+    23,
+    59,
+    59,
+    999
+  );
+  return { startOfToday, endOfToday };
+};
+
+// Calculate due today count
+const dueTodayCount = computed(() => {
+  if (!props.tasks?.length) return 0;
+
+  const { startOfToday, endOfToday } = getTodayBounds();
+
+  return props.tasks.filter((task) => {
+    // Skip completed tasks
+    if (task.completed) return false;
+
+    // Skip tasks without due dates
+    if (!task.dueDate) return false;
+
+    const dueDate = new Date(task.dueDate);
+
+    // Check if due date falls within today's bounds
+    return dueDate >= startOfToday && dueDate <= endOfToday;
+  }).length;
 });
 
+// Calculate overdue count
+const overdueCount = computed(() => {
+  if (!props.tasks?.length) return 0;
+
+  const { startOfToday } = getTodayBounds();
+
+  return props.tasks.filter((task) => {
+    // Skip completed tasks
+    if (task.completed) return false;
+
+    // Skip tasks without due dates
+    if (!task.dueDate) return false;
+
+    const dueDate = new Date(task.dueDate);
+
+    // Check if due date is before today
+    return dueDate < startOfToday;
+  }).length;
+});
+
+// Dynamic welcome message based on stats
 const welcomeMessage = computed(() => {
-  const totalDue = todayTasksCount.value + overdueTasksCount.value;
-  if (totalDue === 0) {
+  const totalTasks = props.tasks?.length || 0;
+  const completedTasks = props.tasks?.filter((t) => t.completed).length || 0;
+  const activeTasks = totalTasks - completedTasks;
+
+  if (totalTasks === 0) {
+    return "Ready to add your first task? Let's get started!";
+  } else if (activeTasks === 0) {
     return "Great job! You're all caught up. Time to tackle some new challenges.";
-  } else if (overdueTasksCount.value > 0) {
-    return `You have ${todayTasksCount.value} tasks due today and ${overdueTasksCount.value} overdue tasks. Let's get them done!`;
+  } else if (overdueCount.value > 0) {
+    return `You have ${overdueCount.value} overdue task${
+      overdueCount.value > 1 ? "s" : ""
+    } that need attention.`;
+  } else if (dueTodayCount.value > 0) {
+    return `You have ${dueTodayCount.value} task${
+      dueTodayCount.value > 1 ? "s" : ""
+    } due today. Let's get them done!`;
   } else {
-    return `You have ${todayTasksCount.value} tasks due today. You've got this!`;
+    return `You have ${activeTasks} active task${
+      activeTasks > 1 ? "s" : ""
+    }. Keep up the momentum!`;
   }
 });
-</script>
 
-<style scoped>
-.bg-grid-pattern {
-  background-image: radial-gradient(
-    circle,
-    rgba(255, 255, 255, 0.1) 1px,
-    transparent 1px
-  );
-  background-size: 20px 20px;
-}
-</style>
+// Debug logging (remove in production)
+onMounted(() => {
+  console.log("WelcomeBanner Debug:", {
+    totalTasks: props.tasks?.length,
+    dueTodayCount: dueTodayCount.value,
+    overdueCount: overdueCount.value,
+    tasksWithDueDates: props.tasks?.filter((t) => t.dueDate).length,
+    sampleDueDates: props.tasks
+      ?.slice(0, 3)
+      .map((t) => ({
+        title: t.title,
+        dueDate: t.dueDate,
+        completed: t.completed,
+      })),
+  });
+});
+</script>

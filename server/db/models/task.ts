@@ -1,26 +1,47 @@
 // server/db/models/task.ts
-import { Schema, model, Document, Types } from 'mongoose'; // Import Document and Types
+import { Schema, model, Document, Types } from "mongoose";
 
-export interface ITask extends Document { // Extend Document for Mongoose methods
-  title: string;
-  description?: string;
-  status: 'pending' | 'completed'; // Added status enum
-  dueDate?: Date;
-  projectId?: Types.ObjectId; // Make it optional by adding '?' and removing required: true
-  // Add other fields you may have or plan to add based on your schema
-  // For example, if you have user roles, you might need them here too.
-  // assignedTo?: Types.ObjectId[];
-  // notes?: string;
-  // checklist?: { text: string; completed: boolean; _id?: Types.ObjectId }[];
+// Define Priority Enum
+export enum TaskPriority {
+  Low = "Low",
+  Medium = "Medium",
+  High = "High",
 }
 
-const taskSchema = new Schema<ITask>({
-  title: { type: String, required: true },
-  description: { type: String },
-  status: { type: String, enum: ['pending', 'completed'], default: 'pending' }, // Ensure enum is defined or included
-  dueDate: { type: Date },
-  // projectId is now optional
-  projectId: { type: Schema.Types.ObjectId, ref: 'Project', required: false }, // <--- CRITICAL CHANGE
-}, { timestamps: true });
+// Define Status Enum
+export enum TaskStatus {
+  Pending = "pending",
+  Completed = "completed",
+}
 
-export const TaskModel = model<ITask>('Task', taskSchema);
+export interface ITask extends Document {
+  title: string;
+  description?: string;
+  status: TaskStatus; // Use the enum
+  priority: TaskPriority; // Ensure priority is always present
+  dueDate?: Date;
+  projectId?: Types.ObjectId;
+  // ... other fields (notes, checklist, etc.)
+}
+
+const taskSchema = new Schema<ITask>(
+  {
+    title: { type: String, required: true },
+    description: { type: String },
+    status: {
+      type: String,
+      enum: Object.values(TaskStatus),
+      default: TaskStatus.Pending,
+    }, // Use enum and default
+    priority: {
+      type: String,
+      enum: Object.values(TaskPriority),
+      default: TaskPriority.Medium,
+    }, // <--- CRITICAL FIX: Add default priority
+    dueDate: { type: Date },
+    projectId: { type: Schema.Types.ObjectId, ref: "Project", required: false },
+  },
+  { timestamps: true }
+);
+
+export const TaskModel = model<ITask>("Task", taskSchema);

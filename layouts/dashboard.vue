@@ -1,3 +1,4 @@
+<!-- file: layouts/dashboard.vue -->
 <template>
   <div class="flex h-screen bg-gray-50 dark:bg-gray-900">
     <!-- Mobile sidebar backdrop (appears when sidebar is open on small screens) -->
@@ -207,21 +208,27 @@
           <!-- Header Actions (Theme Toggle, Notifications, etc.) -->
           <div class="flex items-center space-x-4">
             <!-- Theme Toggle Button -->
-            <button
-              @click="toggleTheme"
-              class="p-2 rounded-md text-gray-500 hover:text-gray-600 hover:bg-gray-100 dark:hover:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-emerald-500"
-              title="Toggle theme"
-            >
-              <!-- UIcon is automatically available if @nuxt/ui is configured -->
-              <UIcon
-                :name="
-                  $colorMode.value === 'dark'
-                    ? 'i-heroicons-sun'
-                    : 'i-heroicons-moon'
-                "
-                class="w-5 h-5"
-              />
-            </button>
+            <ClientOnly>
+              <button
+                @click="toggleTheme"
+                class="p-2 rounded-md text-gray-500 hover:text-gray-600 hover:bg-gray-100 dark:hover:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                title="Toggle theme"
+              >
+                <!-- UIcon is automatically available if @nuxt/ui is configured -->
+                <UIcon
+                  :name="
+                    $colorMode.value === 'dark'
+                      ? 'i-heroicons-sun'
+                      : 'i-heroicons-moon'
+                  "
+                  class="w-5 h-5"
+                />
+              </button>
+              <template #fallback>
+                <!-- Placeholder to prevent layout shift during SSR -->
+                <div class="w-9 h-9"></div>
+              </template>
+            </ClientOnly>
 
             <!-- Notifications Button -->
             <button
@@ -259,12 +266,8 @@
 </template>
 
 <script setup>
-// --- NO LONGER NEEDED ---
-// import { ref, onMounted, onUnmounted } from 'vue';
-// import { useColorMode } from '@nuxtjs/color-mode';
-
 // All functions like ref, onMounted, useColorMode are auto-imported by Nuxt 3.
-// Rely on the auto-imports to prevent the Vite error.
+// Rely on the auto-imports to prevent Vite errors.
 
 // Sidebar state for mobile/tablet visibility
 const sidebarOpen = ref(false);

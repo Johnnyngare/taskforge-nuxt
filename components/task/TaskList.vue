@@ -1,125 +1,123 @@
-<!-- file: components/task/TaskList.vue -->
 <template>
-  <div>
-    <!-- Loading State: Show a spinner or skeleton loaders -->
-    <div v-if="loading" class="p-6 text-center">
-      <UiSpinner size="lg" />
-      <p class="text-sm text-gray-500 mt-2">Loading tasks...</p>
-    </div>
-
-    <!-- Error State -->
-    <div v-else-if="error" class="p-6 text-center text-red-500">
-      <p>Error loading tasks: {{ error.message }}</p>
-      <FormAppButton @click="refreshList()" class="mt-2">Retry</FormAppButton>
-    </div>
-
-    <!-- Empty State (after filtering) -->
-    <div
-      v-else-if="filteredTasks.length === 0"
-      class="p-6 text-center text-gray-500"
-    >
-      <p class="font-semibold">No tasks found</p>
-      <p class="text-sm mt-1">
-        Try adjusting your filters or adding a new task!
-      </p>
-    </div>
-
-    <!-- Data Loaded: Display the list of filtered tasks -->
-    <div v-else class="space-y-4">
-      <!--
-        THE FIX IS HERE:
-        The component tag must be <TaskTaskCard /> (PascalCase) to match the
-        auto-imported name from components/task/TaskCard.vue.
-        Any hyphens (e.g., <TaskTask-Card />) will cause the "Failed to resolve" error.
-      -->
-      <TaskTaskCard
-        v-for="task in filteredTasks"
+  <div class="space-y-4">
+    <TransitionGroup name="task" tag="div" class="space-y-3" appear>
+      <TaskCard
+        v-for="(task, index) in sortedTasks"
         :key="task._id"
         :task="task"
-        @statusChange="
-          (payload) =>
-            onTaskUpdated(payload.taskId, {
-              status: payload.completed ? 'completed' : 'pending',
-            })
-        "
-        @delete="onTaskDeleted(task._id)"
-        @edit="console.log('Edit task:', task._id)"
+        :style="{ animationDelay: `${index * 50}ms` }"
+        class="task-item"
+        @update:task="handleTaskUpdate"
+        @delete:task="handleTaskDelete"
       />
-    </div>
+    </TransitionGroup>
   </div>
 </template>
 
-<script setup>
-import { computed } from "vue";
-import TaskTaskCard from '~/components/task/TaskCard.vue';
+<script setup lang="ts">
+interface Task {
+  _id: string;
+  title: string;
+  description?: string;
+  completed: boolean;
+  priority?: "low" | "medium" | "high";
+  dueDate?: string | Date;
+  project?: string | { name: string; _id: string };
+  createdAt?: string | Date;
+  updatedAt?: string | Date;
+}
 
-// 1. Define props that this component expects to receive from TaskProvider
-const props = defineProps({
-  tasks: {
-    type: Array,
-    default: () => [],
-  },
-  filters: {
-    type: Object,
-    default: () => ({
-      status: "all",
-      priority: "all",
-      project: "all",
-      dueDate: "all",
-    }),
-  },
-  loading: {
-    type: Boolean,
-    default: false,
-  },
-  error: {
-    type: [Object, null],
-    default: null,
-  },
-  // Handlers from the provider that trigger backend actions and data refresh
-  onTaskUpdated: {
-    type: Function,
-    required: true,
-  },
-  onTaskDeleted: {
-    type: Function,
-    required: true,
-  },
-  refreshList: {
-    type: Function,
-    required: true,
-  },
-});
+interface Props {
+  tasks: Task[];
+}
 
-// 2. Computed property to apply filters locally to the 'tasks' prop
-const filteredTasks = computed(() => {
-  if (!props.tasks || props.tasks.length === 0) {
-    return [];
-  }
+interface Emits {
+  (e: "task-updated", task: Task): void;
+  (e: "task-deleted", taskId: string): void;
+}
 
-  return props.tasks.filter((task) => {
-    // --- Apply Status Filter ---
-    if (props.filters.status && props.filters.status !== "all") {
-      if (task.status !== props.filters.status) {
-        return false;
-      }
+const props = defineProps<Props>();
+const emit = defineEmits<Emits>();
+
+// Sort tasks: incomplete first, then by priority, then by due date
+const sortedTasks = computed(() => {
+  const priorityOrder = { high: 3, medium: 2, low: 1 };
+
+  return [...props.tasks].sort((a, b) => {
+    // Completed tasks go to bottom
+    if (a.completed !== b.completed) {
+      return a.completed ? 1 : -1;
     }
 
-    // --- Apply Priority Filter ---
-    if (props.filters.priority && props.filters.priority !== "all") {
-      if (task.priority !== props.filters.priority) {
-        return false;
-      }
+    // Sort by priority (high to low)
+    const aPriority = priorityOrder[a.priority || "medium"];
+    const bPriority = priorityOrder[b.priority || "medium"];
+    if (aPriority !== bPriority) {
+      return bPriority - aPriority;
     }
 
-    // --- Apply Project Filter ---
-    if (props.filters.project && props.filters.project !== "all") {
-      if (task.projectId !== props.filters.project) {
-        return false;
-      }
+    // Sort by due date (earliest first)
+    if (a.dueDate && b.dueDate) {
+      return new Date(a.dueDate).getTime() - new Date(b.dueDate).getTime();
+    }
+    if (a.dueDate && !b.dueDate) return -1;
+    if (!a.dueDate && b.dueDate) return 1;
+
+    // Finally sort by creation date (newest first)
+    if (a.createdAt && b.createdAt) {
+      return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
     }
 
-    return true; // If the task passes all active filters
+    return 0;
   });
 });
+
+const handleTaskUpdate = (updatedTask: Task) => {
+  emit("task-updated", updatedTask);
+};
+
+const handleTaskDelete = (taskId: string) => {
+  emit("task-deleted", taskId);
+};
 </script>
+
+<style scoped>
+/* Task entrance animations */
+.task-item {
+  animation: slideInUp 0.4s ease-out both;
+}
+
+@keyframes slideInUp {
+  from {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* Vue transition animations */
+.task-enter-active {
+  transition: all 0.4s cubic-bezier(0.25, 0.8, 0.25, 1);
+}
+
+.task-leave-active {
+  transition: all 0.3s cubic-bezier(0.4, 0, 1, 1);
+}
+
+.task-enter-from {
+  opacity: 0;
+  transform: translateY(20px) scale(0.95);
+}
+
+.task-leave-to {
+  opacity: 0;
+  transform: translateX(-100%) scale(0.95);
+}
+
+.task-move {
+  transition: transform 0.3s ease;
+}
+</style>

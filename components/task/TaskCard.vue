@@ -1,64 +1,96 @@
-!-- components/TaskCard.vue -->
 <template>
   <div
-    class="group bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 p-6 hover:shadow-md hover:border-emerald-200 dark:hover:border-emerald-800 transition-all duration-200 cursor-pointer"
-    @click="$emit('click', task)"
+    class="bg-slate-800 rounded-lg p-4 border border-slate-700 hover:border-emerald-500/50 hover:shadow-lg hover:shadow-emerald-500/10 transition-all duration-300 group hover:-translate-y-0.5"
   >
-    <!-- Task Header -->
-    <div class="flex items-start justify-between mb-4">
-      <!-- Task Checkbox and Title -->
-      <div class="flex items-start space-x-3 flex-1 min-w-0">
-        <!-- Custom Checkbox -->
-        <div class="flex-shrink-0 mt-1">
-          <input :id="`task-${task._id}`"
-          v-model="isCompleted" type="checkbox" class="w-5 h-5 text-emerald-600
-          bg-gray-100 border-gray-300 rounded focus:ring-emerald-500
-          dark:focus:ring-emerald-600 dark:ring-offset-gray-800 focus:ring-2
-          dark:bg-gray-700 dark:border-gray-600 cursor-pointer"
-          @change="handleStatusChange" @click.stop />
+    <div class="flex items-start justify-between">
+      <!-- Task content -->
+      <div class="flex items-start space-x-3 flex-1">
+        <!-- Checkbox -->
+        <div class="relative">
+          <input
+            type="checkbox"
+            :checked="task.completed"
+            @change="toggleComplete"
+            class="mt-1 w-4 h-4 text-emerald-600 bg-slate-700 border-slate-600 rounded focus:ring-emerald-500 focus:ring-2 focus:ring-offset-0 transition-all duration-200 hover:border-emerald-500"
+          />
         </div>
 
-        <!-- Task Details -->
+        <!-- Task details -->
         <div class="flex-1 min-w-0">
-          <h3
-            :class="[
-              'text-lg font-semibold transition-all duration-200',
-              isCompleted
-                ? 'text-gray-500 dark:text-gray-400 line-through'
-                : 'text-gray-900 dark:text-white group-hover:text-emerald-600 dark:group-hover:text-emerald-400',
-            ]"
-          >
-            {{ task.title }}
-          </h3>
+          <div class="flex items-center space-x-2 mb-1">
+            <h3
+              class="text-white font-medium truncate transition-all duration-200"
+              :class="{ 'line-through text-slate-400': task.completed }"
+            >
+              {{ task.title }}
+            </h3>
+            <TaskPriorityBadge :priority="safeTaskPriority" />
+          </div>
 
-          <!-- Task Description -->
           <p
             v-if="task.description"
-            :class="[
-              'mt-1 text-sm line-clamp-2 transition-colors duration-200',
-              isCompleted
-                ? 'text-gray-400 dark:text-gray-500'
-                : 'text-gray-600 dark:text-gray-300',
-            ]"
+            class="text-slate-400 text-sm mb-2 transition-all duration-200"
+            :class="{ 'line-through text-slate-500': task.completed }"
           >
             {{ task.description }}
           </p>
+
+          <!-- Task metadata -->
+          <div class="flex items-center space-x-4 text-xs text-slate-500">
+            <span v-if="task.dueDate" class="flex items-center space-x-1">
+              <svg
+                class="w-3 h-3"
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+              >
+                <path
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                  stroke-width="2"
+                  d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"
+                />
+              </svg>
+              <span
+                :class="{
+                  'text-red-400': isOverdue,
+                  'text-amber-400': isDueToday,
+                  'text-slate-400': !isOverdue && !isDueToday,
+                }"
+              >
+                {{ formatDate(task.dueDate) }}
+              </span>
+            </span>
+
+            <span v-if="task.project" class="flex items-center space-x-1">
+              <svg
+                class="w-3 h-3"
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+              >
+                <path
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                  stroke-width="2"
+                  d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10"
+                />
+              </svg>
+              <span>{{ projectName }}</span>
+            </span>
+          </div>
         </div>
       </div>
 
-      <!-- Priority Badge -->
-      <!-- Assuming TaskPriorityBadge component exists in components/task/TaskPriorityBadge.vue -->
-      <TaskPriorityBadge :priority="task.priority" class="flex-shrink-0 ml-3" />
-    </div>
-
-    <!-- Task Metadata -->
-    <div class="flex items-center justify-between text-sm">
-      <!-- Left side: Project and Tags -->
-      <div class="flex items-center space-x-3">
-        <!-- Project -->
-        <div
-          v-if="task.projectId"
-          class="flex items-center space-x-1 text-gray-500 dark:text-gray-400"
+      <!-- Action buttons -->
+      <div
+        class="flex items-center space-x-1 opacity-0 group-hover:opacity-100 transition-opacity duration-200 ml-2"
+      >
+        <button
+          @click="editTask"
+          type="button"
+          class="p-1.5 text-slate-400 hover:text-emerald-400 hover:bg-emerald-50/10 rounded-md transition-colors duration-200"
+          title="Edit task"
         >
           <svg
             class="w-4 h-4"
@@ -70,49 +102,19 @@
               stroke-linecap="round"
               stroke-linejoin="round"
               stroke-width="2"
-              d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10"
-            ></path>
+              d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"
+            />
           </svg>
-          <!-- FIX: Display project name if task.project is populated (assuming it's populated/joined)
-                      Otherwise, just show the projectId (less user-friendly)
-                      For now, using projectId as it's directly from the model
-           -->
-          <span class="truncate">{{ task.projectId }}</span>
-        </div>
+        </button>
 
-        <!-- Tags (If your TaskModel doesn't have 'tags', this will be empty) -->
-        <div
-          v-if="task.tags && task.tags.length > 0"
-          class="flex items-center space-x-1"
-        >
-          <div
-            v-for="tag in task.tags.slice(0, 2)"
-            :key="tag"
-            class="px-2 py-1 bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300 rounded-md text-xs font-medium"
-          >
-            {{ tag }}
-          </div>
-          <span
-            v-if="task.tags.length > 2"
-            class="text-gray-400 dark:text-gray-500 text-xs"
-          >
-            +{{ task.tags.length - 2 }}
-          </span>
-        </div>
-      </div>
-
-      <!-- Right side: Due Date and Actions -->
-      <div class="flex items-center space-x-3">
-        <!-- Due Date -->
-        <div
-          v-if="task.dueDate"
-          :class="[
-            'flex items-center space-x-1 text-xs font-medium px-2 py-1 rounded-md',
-            dueDateStatus.class,
-          ]"
+        <button
+          @click="deleteTask"
+          type="button"
+          class="p-1.5 text-slate-400 hover:text-red-400 hover:bg-red-50/10 rounded-md transition-colors duration-200"
+          title="Delete task"
         >
           <svg
-            class="w-3 h-3"
+            class="w-4 h-4"
             fill="none"
             stroke="currentColor"
             viewBox="0 0 24 24"
@@ -121,194 +123,120 @@
               stroke-linecap="round"
               stroke-linejoin="round"
               stroke-width="2"
-              d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"
-            ></path>
+              d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"
+            />
           </svg>
-          <span>{{ dueDateStatus.text }}</span>
-        </div>
-
-        <!-- Quick Actions (visible on hover) -->
-        <div
-          class="flex items-center space-x-1 opacity-0 group-hover:opacity-100 transition-opacity duration-200"
-        >
-          <!-- Edit Button -->
-          <button
-            @click.stop="$emit('edit', task)"
-            class="p-1.5 text-gray-400 hover:text-emerald-600 dark:hover:text-emerald-400 hover:bg-emerald-50 dark:hover:bg-emerald-900/20 rounded-md transition-colors duration-200"
-            title="Edit task"
-          >
-            <svg
-              class="w-4 h-4"
-              fill="none"
-              stroke="currentColor"
-              viewBox="0 0 24 24"
-            >
-              <path
-                stroke-linecap="round"
-                stroke-linejoin="round"
-                stroke-width="2"
-                d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"
-              ></path>
-            </svg>
-          </button>
-
-          <!-- Delete Button -->
-          <button
-            @click.stop="$emit('delete', task)"
-            class="p-1.5 text-gray-400 hover:text-red-600 dark:hover:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-md transition-colors duration-200"
-            title="Delete task"
-          >
-            <svg
-              class="w-4 h-4"
-              fill="none"
-              stroke="currentColor"
-              viewBox="0 0 24 24"
-            >
-              <path
-                stroke-linecap="round"
-                stroke-linejoin="round"
-                stroke-width="2"
-                d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"
-              ></path>
-            </svg>
-          </button>
-        </div>
-      </div>
-    </div>
-
-    <!-- Progress Bar (if task has subtasks) -->
-    <!-- FIX: Check for task.checklist (from new model) not task.subtasks -->
-    <div v-if="task.checklist && task.checklist.length > 0" class="mt-4">
-      <div
-        class="flex items-center justify-between text-xs text-gray-500 dark:text-gray-400 mb-2"
-      >
-        <span>Progress</span>
-        <span
-          >{{ completedChecklistItems }}/{{ task.checklist.length }} items</span
-        >
-      </div>
-      <div class="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-2">
-        <div
-          class="bg-emerald-600 h-2 rounded-full transition-all duration-300"
-          :style="{ width: `${progressPercentage}%` }"
-        ></div>
+        </button>
       </div>
     </div>
   </div>
 </template>
 
-<script setup>
-import { ref, computed, watch } from "vue"; // Ensure all needed APIs are imported
+<script setup lang="ts">
+interface Task {
+  _id: string;
+  title: string;
+  description?: string;
+  completed: boolean;
+  priority?: "low" | "medium" | "high";
+  dueDate?: string | Date;
+  project?: string | { name: string; _id: string };
+  createdAt?: string | Date;
+  updatedAt?: string | Date;
+}
 
-// Component props
-const props = defineProps({
-  task: {
-    type: Object,
-    required: true,
-    // FIX: Update validator to check for MongoDB _id and title
-    validator: (task) => {
-      return (
-        task &&
-        typeof task._id !== "undefined" &&
-        typeof task.title === "string"
-      );
-    },
-  },
+interface Props {
+  task: Task;
+}
+
+interface Emits {
+  (e: "update:task", task: Task): void;
+  (e: "delete:task", taskId: string): void;
+}
+
+const props = defineProps<Props>();
+const emit = defineEmits<Emits>();
+
+// Computed properties for safe access and formatting
+const safeTaskPriority = computed(() => {
+  return props.task.priority || "medium";
 });
 
-// Component emits
-const emit = defineEmits(["click", "edit", "delete", "statusChange"]);
-
-// Reactive data for checkbox state, initialized from task.status
-// FIX: Map 'status' from MongoDB to a boolean for checkbox
-const isCompleted = ref(props.task.status === "completed");
-
-// Computed properties for checklist progress
-// FIX: Use task.checklist instead of task.subtasks
-const completedChecklistItems = computed(() => {
-  if (!props.task.checklist) return 0;
-  return props.task.checklist.filter((item) => item.completed).length;
+const projectName = computed(() => {
+  if (!props.task.project) return "";
+  return typeof props.task.project === "string"
+    ? props.task.project
+    : props.task.project.name;
 });
 
-const progressPercentage = computed(() => {
-  if (!props.task.checklist || props.task.checklist.length === 0) return 0;
-  return Math.round(
-    (completedChecklistItems.value / props.task.checklist.length) * 100
-  );
-});
-
-const dueDateStatus = computed(() => {
-  if (!props.task.dueDate) return null;
-
-  const today = new Date();
-  today.setHours(0, 0, 0, 0); // Normalize today to start of day
+const isOverdue = computed(() => {
+  if (!props.task.dueDate || props.task.completed) return false;
   const dueDate = new Date(props.task.dueDate);
-  dueDate.setHours(0, 0, 0, 0); // Normalize due date to start of day
+  const now = new Date();
+  now.setHours(0, 0, 0, 0);
+  return dueDate < now;
+});
 
-  const diffTime = dueDate.getTime() - today.getTime(); // Use getTime() for milliseconds
-  const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24)); // Calculate days difference
-
-  if (diffDays < 0) {
-    return {
-      text: `${Math.abs(diffDays)} days overdue`,
-      class: "bg-red-100 text-red-800 dark:bg-red-900/20 dark:text-red-400",
-    };
-  } else if (diffDays === 0) {
-    return {
-      text: "Due today",
-      class:
-        "bg-orange-100 text-orange-800 dark:bg-orange-900/20 dark:text-orange-400",
-    };
-  } else if (diffDays === 1) {
-    return {
-      text: "Due tomorrow",
-      class:
-        "bg-yellow-100 text-yellow-800 dark:bg-yellow-900/20 dark:text-yellow-400",
-    };
-  } else if (diffDays <= 7) {
-    return {
-      text: `Due in ${diffDays} days`,
-      class: "bg-blue-100 text-blue-800 dark:bg-blue-900/20 dark:text-blue-400",
-    };
-  } else {
-    // FIX: Format date correctly. toLocaleDateString might be too verbose.
-    // Consider a custom date formatter for consistency.
-    return {
-      text: new Date(props.task.dueDate).toLocaleDateString("en-US", {
-        month: "short",
-        day: "numeric",
-        year: "numeric",
-      }),
-      class: "bg-gray-100 text-gray-600 dark:bg-gray-700 dark:text-gray-300",
-    };
-  }
+const isDueToday = computed(() => {
+  if (!props.task.dueDate || props.task.completed) return false;
+  const dueDate = new Date(props.task.dueDate);
+  const today = new Date();
+  return dueDate.toDateString() === today.toDateString();
 });
 
 // Methods
-const handleStatusChange = () => {
-  // FIX: Emit task._id and the new status
-  emit("statusChange", {
-    taskId: props.task._id,
-    completed: isCompleted.value, // Pass the boolean for completion
-  });
+const toggleComplete = async () => {
+  try {
+    const updatedTask = { ...props.task, completed: !props.task.completed };
+
+    // Call API to update task
+    await $fetch(`/api/tasks/${props.task._id}`, {
+      method: "PATCH",
+      body: { completed: updatedTask.completed },
+    });
+
+    // Emit the updated task
+    emit("update:task", updatedTask);
+  } catch (error) {
+    console.error("Failed to update task:", error);
+  }
 };
 
-// Watch for external changes to task completion status
-// FIX: Watch props.task.status directly (from MongoDB 'pending'/'completed')
-watch(
-  () => props.task.status,
-  (newStatus) => {
-    isCompleted.value = newStatus === "completed";
-  }
-);
-</script>
+const editTask = () => {
+  // TODO: Implement edit functionality (modal, inline edit, or navigate to edit page)
+  console.log("Edit task:", props.task._id);
+};
 
-<style scoped>
-/* Custom line-clamp utility for description text */
-.line-clamp-2 {
-  display: -webkit-box;
-  -webkit-line-clamp: 2;
-  -webkit-box-orient: vertical;
-  overflow: hidden;
-}
-</style>
+const deleteTask = async () => {
+  if (!confirm("Are you sure you want to delete this task?")) return;
+
+  try {
+    await $fetch(`/api/tasks/${props.task._id}`, {
+      method: "DELETE",
+    });
+
+    emit("delete:task", props.task._id);
+  } catch (error) {
+    console.error("Failed to delete task:", error);
+  }
+};
+
+const formatDate = (date: string | Date) => {
+  const d = new Date(date);
+  const today = new Date();
+  const tomorrow = new Date(today);
+  tomorrow.setDate(tomorrow.getDate() + 1);
+
+  if (d.toDateString() === today.toDateString()) {
+    return "Today";
+  } else if (d.toDateString() === tomorrow.toDateString()) {
+    return "Tomorrow";
+  } else {
+    return d.toLocaleDateString("en-US", {
+      month: "short",
+      day: "numeric",
+      year: d.getFullYear() !== today.getFullYear() ? "numeric" : undefined,
+    });
+  }
+};
+</script>
