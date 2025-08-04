@@ -1,96 +1,171 @@
-<!-- file: components/dashboard/UpcomingDeadlines.vue -->
 <template>
-  <div
-    class="bg-white dark:bg-gray-800/50 rounded-lg border border-gray-200 dark:border-gray-700 shadow-sm p-4"
-  >
-    <h2 class="text-lg font-semibold text-gray-900 dark:text-gray-100 mb-4">
-      Upcoming Deadlines
-    </h2>
-    <ul v-if="upcomingTasks.length > 0" class="space-y-3">
-      <li
-        v-for="task in upcomingTasks"
-        :key="task.id"
-        class="flex justify-between items-center text-sm"
+  <div class="rounded-xl border border-gray-200 bg-white p-6 shadow-sm">
+    <div class="mb-6 flex items-center justify-between">
+      <h3 class="text-lg font-semibold text-gray-900">Upcoming Deadlines</h3>
+      <button
+        v-if="upcomingTasks.length > 3"
+        @click="showAll = !showAll"
+        class="text-sm font-medium text-blue-600 transition-colors hover:text-blue-700"
       >
-        <span
-          :class="[
-            'truncate',
-            task.completed
-              ? 'line-through text-gray-400'
-              : 'text-gray-700 dark:text-gray-200',
-          ]"
-          >{{ task.title }}</span
-        >
-        <span :class="getDueDateClass(task.dueDate)">{{
-          formatDate(task.dueDate)
-        }}</span>
-      </li>
-    </ul>
+        {{ showAll ? "Show Less" : "Show All" }}
+      </button>
+    </div>
+
+    <!-- No upcoming deadlines -->
+    <div v-if="!upcomingTasks.length" class="py-8 text-center">
+      <Icon
+        name="heroicons:calendar-days"
+        class="mx-auto mb-4 h-12 w-12 text-gray-400"
+      />
+      <h4 class="mb-2 text-lg font-medium text-gray-900">
+        No upcoming deadlines
+      </h4>
+      <p class="text-sm text-gray-500">
+        You're all caught up! Great job staying on top of your tasks.
+      </p>
+    </div>
+
+    <!-- Upcoming tasks list -->
+    <div v-else class="space-y-3">
+      <div
+        v-for="task in displayedTasks"
+        :key="task._id"
+        class="group flex cursor-pointer items-start gap-3 rounded-lg p-3 transition-colors hover:bg-gray-50"
+        @click="$emit('task-selected', task)"
+      >
+        <div class="mt-1 flex-shrink-0">
+          <div
+            class="h-3 w-3 rounded-full"
+            :class="getPriorityColor(task.priority)"
+          ></div>
+        </div>
+        <div class="min-w-0 flex-1">
+          <h4
+            class="truncate font-medium text-gray-900 transition-colors group-hover:text-blue-600"
+          >
+            {{ task.title }}
+          </h4>
+          <div class="mt-1 flex items-center gap-1">
+            <Icon
+              name="heroicons:clock"
+              class="h-4 w-4"
+              :class="getUrgencyColor(task.dueDate)"
+            />
+            <span
+              class="text-sm font-medium"
+              :class="getUrgencyColor(task.dueDate)"
+            >
+              {{ formatDueDate(task.dueDate) }}
+            </span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Summary statistics -->
     <div
-      v-else
-      class="text-center text-gray-500 dark:text-gray-400 text-sm py-4"
+      v-if="upcomingTasks.length > 0"
+      class="mt-6 border-t border-gray-200 pt-4"
     >
-      No upcoming deadlines! Good job.
+      <div class="grid grid-cols-3 gap-4 text-center">
+        <div>
+          <div class="text-lg font-semibold text-red-600">
+            {{ overdueTasks }}
+          </div>
+          <div class="text-xs text-gray-500">Overdue</div>
+        </div>
+        <div>
+          <div class="text-lg font-semibold text-orange-600">
+            {{ dueTodayTasks }}
+          </div>
+          <div class="text-xs text-gray-500">Due Today</div>
+        </div>
+        <div>
+          <div class="text-lg font-semibold text-blue-600">
+            {{ dueThisWeekTasks }}
+          </div>
+          <div class="text-xs text-gray-500">This Week</div>
+        </div>
+      </div>
     </div>
   </div>
 </template>
 
 <script setup>
-import { computed } from "vue";
+import { ref, computed } from "vue";
 
-// 1. Define the 'tasks' prop to receive data from the parent.
 const props = defineProps({
-  tasks: {
-    type: Array,
-    default: () => [],
-  },
+  tasks: { type: Array, default: () => [] },
 });
+const emit = defineEmits(["task-selected"]);
+const showAll = ref(false);
 
-// 2. Create a computed property based on props.tasks.
 const upcomingTasks = computed(() => {
-  // THE FIX: Add a guard clause to ensure props.tasks exists.
-  if (!props.tasks || props.tasks.length === 0) {
-    return [];
-  }
-
-  const today = new Date();
-  today.setHours(0, 0, 0, 0); // Normalize to the start of the day
-
-  // Filter for non-completed tasks due in the next 7 days, sorted by due date.
+  const now = new Date();
   return props.tasks
-    .filter((task) => {
-      if (task.completed || !task.dueDate) return false;
-      const dueDate = new Date(task.dueDate);
-      const diffTime = dueDate.getTime() - today.getTime();
-      const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-      return diffDays >= 0 && diffDays <= 7;
-    })
-    .sort((a, b) => new Date(a.dueDate) - new Date(b.dueDate))
-    .slice(0, 5); // Show the top 5 upcoming tasks
+    .filter((task) => task.dueDate && task.status !== "completed")
+    .sort((a, b) => new Date(a.dueDate) - new Date(b.dueDate));
 });
 
-// Helper functions (no changes needed here, but they are good to have)
-const formatDate = (dateString) => {
-  const date = new Date(dateString);
-  const today = new Date();
-  const tomorrow = new Date(today);
-  tomorrow.setDate(today.getDate() + 1);
+const displayedTasks = computed(() =>
+  showAll.value ? upcomingTasks.value : upcomingTasks.value.slice(0, 3)
+);
 
-  if (date.toDateString() === today.toDateString()) return "Today";
-  if (date.toDateString() === tomorrow.toDateString()) return "Tomorrow";
-  return date.toLocaleDateString("en-US", { month: "short", day: "numeric" });
+const overdueTasks = computed(
+  () =>
+    upcomingTasks.value.filter(
+      (task) => new Date(task.dueDate) < new Date().setHours(0, 0, 0, 0)
+    ).length
+);
+
+const dueTodayTasks = computed(
+  () =>
+    upcomingTasks.value.filter(
+      (task) =>
+        new Date(task.dueDate).toDateString() === new Date().toDateString()
+    ).length
+);
+
+const dueThisWeekTasks = computed(() => {
+  const now = new Date();
+  const endOfWeek = new Date();
+  endOfWeek.setDate(now.getDate() + (7 - now.getDay()));
+  return upcomingTasks.value.filter((task) => {
+    const dueDate = new Date(task.dueDate);
+    return dueDate >= now && dueDate <= endOfWeek;
+  }).length;
+});
+
+const getPriorityColor = (priority) =>
+  ({
+    high: "bg-orange-500",
+    medium: "bg-yellow-500",
+    low: "bg-green-500",
+  }[priority] || "bg-gray-400");
+
+const getUrgencyColor = (dueDate) => {
+  const taskDueDate = new Date(dueDate);
+  const today = new Date();
+  if (taskDueDate < today.setHours(0, 0, 0, 0)) return "text-red-600";
+  if (taskDueDate.toDateString() === new Date().toDateString())
+    return "text-orange-600";
+  return "text-gray-500";
 };
 
-const getDueDateClass = (dateString) => {
+const formatDueDate = (dateString) => {
   const date = new Date(dateString);
-  const today = new Date();
-  const diffTime = date.getTime() - today.getTime();
-  const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+  const now = new Date();
+  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  const taskDate = new Date(
+    date.getFullYear(),
+    date.getMonth(),
+    date.getDate()
+  );
+  const diffDays = Math.ceil((taskDate - today) / (1000 * 60 * 60 * 24));
 
-  if (diffDays < 0) return "text-red-600 dark:text-red-400 font-semibold";
-  if (diffDays === 0)
-    return "text-orange-600 dark:text-orange-400 font-semibold";
-  if (diffDays <= 3) return "text-yellow-600 dark:text-yellow-400";
-  return "text-gray-500 dark:text-gray-400";
+  if (diffDays === 0) return "Today";
+  if (diffDays === 1) return "Tomorrow";
+  if (diffDays < 0) return `${Math.abs(diffDays)} days overdue`;
+  return `In ${diffDays} days`;
 };
 </script>

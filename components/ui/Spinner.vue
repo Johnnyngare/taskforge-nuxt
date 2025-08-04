@@ -1,13 +1,26 @@
-<!-- file: components/ui/Spinner.vue -->
 <template>
-  <div class="flex justify-center items-center">
-    <div
-      :class="[spinnerSizeClasses, spinnerColorClass]"
-      class="animate-spin rounded-full border-t-2 border-b-2"
-      role="status"
+  <div class="inline-block" :class="sizeClass">
+    <svg
+      class="animate-spin"
+      :class="[sizeClass, colorClass]"
+      xmlns="http://www.w3.org/2000/svg"
+      fill="none"
+      viewBox="0 0 24 24"
     >
-      <span class="sr-only">Loading...</span>
-    </div>
+      <circle
+        class="opacity-25"
+        cx="12"
+        cy="12"
+        r="10"
+        stroke="currentColor"
+        stroke-width="4"
+      />
+      <path
+        class="opacity-75"
+        fill="currentColor"
+        d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
+      />
+    </svg>
   </div>
 </template>
 
@@ -15,54 +28,32 @@
 import { computed } from "vue";
 
 const props = defineProps({
-  /**
-   * Defines the size of the spinner.
-   * @values 'sm', 'md', 'lg'
-   */
   size: {
     type: String,
     default: "md",
-    validator: (value) => ["sm", "md", "lg"].includes(value),
+    validator: (value) => ["xs", "sm", "md", "lg", "xl"].includes(value),
   },
-  /**
-   * Defines the color of the spinner. Uses Tailwind CSS color names (e.g., 'emerald', 'blue').
-   * Supports 'inherit' to use parent's text color.
-   */
   color: {
     type: String,
-    default: "emerald",
-    // You could add more sophisticated validation here for valid Tailwind colors
-    // but for simplicity, we'll allow any string.
+    default: "current", // 'current', 'white', or a color name like 'blue'
   },
 });
 
-// Computed property to determine Tailwind classes for size
-const spinnerSizeClasses = computed(() => {
-  switch (props.size) {
-    case "sm":
-      return "h-5 w-5";
-    case "lg":
-      return "h-12 w-12";
-    case "md":
-    default:
-      return "h-8 w-8";
-  }
-});
+const sizeClass = computed(
+  () =>
+    ({
+      xs: "w-3 h-3",
+      sm: "w-4 h-4",
+      md: "w-6 h-6",
+      lg: "w-8 h-8",
+      xl: "w-12 h-12",
+    }[props.size])
+);
 
-// Computed property to determine Tailwind classes for color
-const spinnerColorClass = computed(() => {
-  if (props.color === "inherit") {
-    // border-t and border-b will inherit the text color if set on parent
-    return "border-current";
-  }
-  // Construct classes like 'border-t-emerald-500', 'border-b-emerald-500'
-  return `border-t-${props.color}-500 border-b-${props.color}-500`;
+const colorClass = computed(() => {
+  if (props.color === "current") return "text-current";
+  if (props.color === "white") return "text-white";
+  // Assumes tailwind color like 'blue', 'green', etc.
+  return `text-${props.color}-600`;
 });
 </script>
-
-<style scoped>
-/*
-  The `animate-spin` utility from Tailwind CSS provides a smooth, continuous rotation.
-  No custom CSS needed for the animation itself!
-*/
-</style>

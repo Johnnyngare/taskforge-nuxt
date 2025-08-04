@@ -1,320 +1,249 @@
 <template>
-  <div
-    class="bg-slate-800 rounded-xl p-6 border border-slate-700 hover:border-slate-600 transition-colors duration-200"
-  >
-    <h3
-      class="text-lg font-semibold text-white mb-6 flex items-center space-x-2"
-    >
-      <svg
-        class="w-5 h-5 text-emerald-400"
-        fill="none"
-        stroke="currentColor"
-        viewBox="0 0 24 24"
+  <div class="rounded-xl border border-gray-200 bg-white p-6 shadow-sm">
+    <div class="mb-6 flex items-center justify-between">
+      <h3 class="text-lg font-semibold text-gray-900">Productivity Stats</h3>
+      <select
+        v-model="selectedPeriod"
+        class="rounded-md border border-gray-300 px-2 py-1 text-sm transition-colors focus:border-blue-500 focus:ring-2 focus:ring-blue-500"
       >
-        <path
-          stroke-linecap="round"
-          stroke-linejoin="round"
-          stroke-width="2"
-          d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"
-        />
-      </svg>
-      <span>Productivity Stats</span>
-    </h3>
+        <option value="week">This Week</option>
+        <option value="month">This Month</option>
+        <option value="quarter">This Quarter</option>
+      </select>
+    </div>
 
-    <div class="space-y-6">
-      <!-- Tasks Completed This Week -->
-      <div>
-        <div class="flex items-center justify-between mb-3">
-          <span class="text-slate-300 text-sm font-medium"
-            >Tasks Completed this Week</span
-          >
-          <span class="text-white font-semibold"
-            >{{ completedThisWeek }}/{{ totalThisWeek }}</span
-          >
+    <!-- Main Stats Grid -->
+    <div class="mb-6 grid grid-cols-2 gap-4">
+      <!-- Completion Rate -->
+      <div
+        class="rounded-lg bg-gradient-to-br from-green-50 to-green-100 p-4 text-center"
+      >
+        <div class="mb-1 text-2xl font-bold text-green-700">
+          {{ completionRate }}%
         </div>
-        <div class="w-full bg-slate-700 rounded-full h-2.5 overflow-hidden">
-          <div
-            class="bg-gradient-to-r from-emerald-500 to-emerald-400 h-2.5 rounded-full transition-all duration-500 ease-out"
-            :style="{ width: `${weeklyCompletionPercentage}%` }"
-          ></div>
-        </div>
-        <div
-          class="text-xs text-slate-400 mt-2 flex items-center justify-between"
-        >
-          <span>{{ weeklyCompletionPercentage }}% completion rate</span>
-          <span v-if="totalThisWeek > 0" class="text-emerald-400"
-            >{{ averageTasksPerDay }}/day avg</span
-          >
+        <div class="text-sm font-medium text-green-600">Completion Rate</div>
+        <div class="mt-1 text-xs text-green-500">
+          {{ completedTasks }} of {{ totalRelevantTasks }} tasks
         </div>
       </div>
 
-      <!-- Overdue Tasks -->
-      <div class="flex items-center justify-between py-2">
-        <span class="text-slate-300 text-sm flex items-center space-x-2">
-          <svg
-            class="w-4 h-4 text-red-400"
-            fill="none"
-            stroke="currentColor"
-            viewBox="0 0 24 24"
-          >
-            <path
-              stroke-linecap="round"
-              stroke-linejoin="round"
-              stroke-width="2"
-              d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"
-            />
-          </svg>
-          <span>Overdue Tasks</span>
-        </span>
-        <span
-          class="font-semibold text-lg"
-          :class="overdueCount > 0 ? 'text-red-400' : 'text-emerald-400'"
-        >
-          {{ overdueCount }}
-        </span>
-      </div>
-
-      <!-- Active Projects -->
-      <div class="flex items-center justify-between py-2">
-        <span class="text-slate-300 text-sm flex items-center space-x-2">
-          <svg
-            class="w-4 h-4 text-blue-400"
-            fill="none"
-            stroke="currentColor"
-            viewBox="0 0 24 24"
-          >
-            <path
-              stroke-linecap="round"
-              stroke-linejoin="round"
-              stroke-width="2"
-              d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10"
-            />
-          </svg>
-          <span>Projects Active</span>
-        </span>
-        <span class="text-blue-400 font-semibold text-lg">{{
-          activeProjectsCount
-        }}</span>
-      </div>
-
-      <!-- Weekly Streak -->
-      <div class="flex items-center justify-between py-2">
-        <span class="text-slate-300 text-sm flex items-center space-x-2">
-          <svg
-            class="w-4 h-4 text-purple-400"
-            fill="none"
-            stroke="currentColor"
-            viewBox="0 0 24 24"
-          >
-            <path
-              stroke-linecap="round"
-              stroke-linejoin="round"
-              stroke-width="2"
-              d="M17.657 18.657A8 8 0 016.343 7.343S7 9 9 10c0-2 .5-5 2.986-7C14 5 16.09 5.777 17.656 7.343A7.975 7.975 0 0120 13a7.975 7.975 0 01-2.343 5.657z"
-            />
-          </svg>
-          <span>Weekly Productivity</span>
-        </span>
-        <span
-          class="font-semibold text-lg"
-          :class="
-            weeklyCompletionPercentage >= 70
-              ? 'text-emerald-400'
-              : weeklyCompletionPercentage >= 40
-              ? 'text-amber-400'
-              : 'text-slate-400'
-          "
-        >
-          {{ productivityLevel }}
-        </span>
+      <!-- Average Daily Tasks -->
+      <div
+        class="rounded-lg bg-gradient-to-br from-blue-50 to-blue-100 p-4 text-center"
+      >
+        <div class="mb-1 text-2xl font-bold text-blue-700">
+          {{ averageDailyTasks }}
+        </div>
+        <div class="text-sm font-medium text-blue-600">Avg Daily Tasks</div>
+        <div class="mt-1 text-xs text-blue-500">
+          {{ totalRelevantTasks }} tasks total
+        </div>
       </div>
     </div>
 
-    <!-- Week Progress Chart Placeholder -->
-    <div class="mt-6 pt-4 border-t border-slate-700">
-      <div
-        class="h-20 bg-slate-700/30 rounded-lg flex items-center justify-center relative overflow-hidden"
-      >
-        <div
-          class="absolute inset-0 bg-gradient-to-r from-emerald-500/10 to-blue-500/10"
-        ></div>
-        <span class="text-slate-400 text-sm relative z-10"
-          >[Weekly Trend Chart]</span
-        >
+    <!-- Detailed Breakdown -->
+    <div class="space-y-4">
+      <!-- Tasks by Status -->
+      <div v-if="statusBreakdown.length">
+        <h4 class="mb-3 text-sm font-medium text-gray-700">Tasks by Status</h4>
+        <div class="space-y-2">
+          <div
+            v-for="status in statusBreakdown"
+            :key="status.name"
+            class="flex items-center justify-between"
+          >
+            <div class="flex items-center gap-2">
+              <div
+                class="h-3 w-3 rounded-full"
+                :class="status.colorClass"
+              ></div>
+              <span class="text-sm text-gray-600">{{ status.label }}</span>
+            </div>
+            <div class="flex items-center gap-2">
+              <span class="text-sm font-medium text-gray-900">{{
+                status.count
+              }}</span>
+              <span class="text-xs text-gray-500"
+                >({{ status.percentage }}%)</span
+              >
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Weekly Trend -->
+      <div v-if="selectedPeriod === 'week'">
+        <h4 class="mb-3 text-sm font-medium text-gray-700">
+          This Week's Progress
+        </h4>
+        <div class="grid grid-cols-7 gap-1">
+          <div
+            v-for="(day, index) in weeklyProgress"
+            :key="index"
+            class="text-center"
+          >
+            <div class="mb-1 text-xs text-gray-500">{{ day.label }}</div>
+            <div
+              class="flex h-8 items-center justify-center rounded bg-gray-200 text-xs font-medium"
+              :class="
+                day.completedTasks > 0
+                  ? 'bg-green-200 text-green-700'
+                  : 'text-gray-400'
+              "
+              :title="`${day.completedTasks} tasks completed`"
+            >
+              {{ day.completedTasks }}
+            </div>
+          </div>
+        </div>
+        <div class="mt-2 text-center text-xs text-gray-500">
+          Tasks completed each day
+        </div>
+      </div>
+
+      <!-- Productivity Insights -->
+      <div class="rounded-lg bg-gray-50 p-4">
+        <h4 class="mb-2 text-sm font-medium text-gray-700">💡 Insights</h4>
+        <div class="space-y-1">
+          <p
+            v-for="insight in productivityInsights"
+            :key="insight"
+            class="text-xs text-gray-600"
+          >
+            {{ insight }}
+          </p>
+        </div>
       </div>
     </div>
   </div>
 </template>
 
-<script setup lang="ts">
-interface Task {
-  _id: string;
-  title: string;
-  description?: string;
-  completed: boolean;
-  priority?: "low" | "medium" | "high";
-  dueDate?: string | Date;
-  project?: string | { name: string; _id: string };
-  createdAt?: string | Date;
-  updatedAt?: string | Date;
-  completedAt?: string | Date;
-}
+<script setup>
+import { ref, computed } from "vue";
 
-interface Props {
-  tasks?: Task[];
-}
-
-const props = withDefaults(defineProps<Props>(), {
-  tasks: () => [],
+const props = defineProps({
+  tasks: {
+    type: Array,
+    default: () => [],
+  },
 });
 
-// Get start of current week (Monday)
-const getWeekBounds = () => {
+const selectedPeriod = ref("week");
+
+const getDateRange = (period) => {
   const now = new Date();
-  const currentDay = now.getDay();
-  const daysFromMonday = currentDay === 0 ? 6 : currentDay - 1; // Sunday = 0, so Sunday is 6 days from Monday
-
-  const startOfWeek = new Date(now);
-  startOfWeek.setDate(now.getDate() - daysFromMonday);
-  startOfWeek.setHours(0, 0, 0, 0);
-
-  const endOfWeek = new Date(startOfWeek);
-  endOfWeek.setDate(startOfWeek.getDate() + 6);
-  endOfWeek.setHours(23, 59, 59, 999);
-
-  return { startOfWeek, endOfWeek };
+  const startDate = new Date();
+  switch (period) {
+    case "week":
+      startDate.setDate(now.getDate() - now.getDay());
+      break;
+    case "month":
+      startDate.setDate(1);
+      break;
+    case "quarter":
+      const quarter = Math.floor(now.getMonth() / 3);
+      startDate.setMonth(quarter * 3, 1);
+      break;
+  }
+  startDate.setHours(0, 0, 0, 0);
+  return { startDate, endDate: now };
 };
 
-// Calculate tasks completed this week
-const completedThisWeek = computed(() => {
-  if (!props.tasks?.length) return 0;
+const dateRange = computed(() => getDateRange(selectedPeriod.value));
 
-  const { startOfWeek, endOfWeek } = getWeekBounds();
-
+const relevantTasks = computed(() => {
+  const { startDate, endDate } = dateRange.value;
   return props.tasks.filter((task) => {
-    if (!task.completed) return false;
-
-    // Try to use completedAt first, then updatedAt, then createdAt as fallback
-    let completionDate: Date | null = null;
-
-    if (task.completedAt) {
-      completionDate = new Date(task.completedAt);
-    } else if (task.completed && task.updatedAt) {
-      completionDate = new Date(task.updatedAt);
-    } else if (task.completed && task.createdAt) {
-      completionDate = new Date(task.createdAt);
-    }
-
-    if (!completionDate) return false;
-
-    return completionDate >= startOfWeek && completionDate <= endOfWeek;
-  }).length;
-});
-
-// Calculate total tasks for this week (created or due this week)
-const totalThisWeek = computed(() => {
-  if (!props.tasks?.length) return 0;
-
-  const { startOfWeek, endOfWeek } = getWeekBounds();
-
-  const tasksThisWeek = props.tasks.filter((task) => {
-    // Count tasks created this week
-    if (task.createdAt) {
-      const createdDate = new Date(task.createdAt);
-      if (createdDate >= startOfWeek && createdDate <= endOfWeek) {
-        return true;
-      }
-    }
-
-    // Count tasks due this week (even if created earlier)
-    if (task.dueDate) {
-      const dueDate = new Date(task.dueDate);
-      if (dueDate >= startOfWeek && dueDate <= endOfWeek) {
-        return true;
-      }
-    }
-
-    return false;
+    const taskDate = new Date(task.createdAt);
+    return taskDate >= startDate && taskDate <= endDate;
   });
-
-  // If no tasks match the week criteria, fall back to active tasks for current calculation
-  return (
-    tasksThisWeek.length || props.tasks.filter((task) => !task.completed).length
-  );
 });
 
-// Calculate weekly completion percentage
-const weeklyCompletionPercentage = computed(() => {
-  if (totalThisWeek.value === 0) return 0;
-  return Math.round((completedThisWeek.value / totalThisWeek.value) * 100);
+const totalRelevantTasks = computed(() => relevantTasks.value.length);
+
+const completedTasks = computed(
+  () => relevantTasks.value.filter((task) => task.status === "completed").length
+);
+
+const completionRate = computed(() => {
+  if (totalRelevantTasks.value === 0) return 0;
+  return Math.round((completedTasks.value / totalRelevantTasks.value) * 100);
 });
 
-// Calculate overdue tasks
-const overdueCount = computed(() => {
-  if (!props.tasks?.length) return 0;
-
-  const now = new Date();
-  now.setHours(0, 0, 0, 0);
-
-  return props.tasks.filter((task) => {
-    if (task.completed || !task.dueDate) return false;
-
-    const dueDate = new Date(task.dueDate);
-    return dueDate < now;
-  }).length;
+const averageDailyTasks = computed(() => {
+  const { startDate, endDate } = dateRange.value;
+  const daysDiff =
+    Math.ceil((endDate - startDate) / (1000 * 60 * 60 * 24)) || 1;
+  return parseFloat((totalRelevantTasks.value / daysDiff).toFixed(1));
 });
 
-// Calculate active projects
-const activeProjectsCount = computed(() => {
-  if (!props.tasks?.length) return 0;
+const statusBreakdown = computed(() => {
+  const statuses = [
+    { name: "completed", label: "Completed", colorClass: "bg-green-500" },
+    { name: "in_progress", label: "In Progress", colorClass: "bg-blue-500" },
+    { name: "pending", label: "Pending", colorClass: "bg-yellow-500" },
+    { name: "cancelled", label: "Cancelled", colorClass: "bg-red-500" },
+  ];
+  return statuses
+    .map((status) => {
+      const count = relevantTasks.value.filter(
+        (task) => task.status === status.name
+      ).length;
+      return {
+        ...status,
+        count,
+        percentage:
+          totalRelevantTasks.value > 0
+            ? Math.round((count / totalRelevantTasks.value) * 100)
+            : 0,
+      };
+    })
+    .filter((status) => status.count > 0);
+});
 
-  const activeProjects = new Set();
-  props.tasks.forEach((task) => {
-    if (!task.completed && task.project) {
-      const projectId =
-        typeof task.project === "string" ? task.project : task.project._id;
-      if (projectId) {
-        activeProjects.add(projectId);
-      }
-    }
+const weeklyProgress = computed(() => {
+  if (selectedPeriod.value !== "week") return [];
+  const days = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+  const startOfWeek = dateRange.value.startDate;
+  return days.map((label, index) => {
+    const day = new Date(startOfWeek);
+    day.setDate(startOfWeek.getDate() + index);
+    const dayStr = day.toISOString().split("T")[0];
+    const completedTasks = props.tasks.filter((task) => {
+      if (task.status !== "completed" || !task.updatedAt) return false;
+      return new Date(task.updatedAt).toISOString().split("T")[0] === dayStr;
+    }).length;
+    return { label, completedTasks };
   });
-
-  return activeProjects.size;
 });
 
-// Calculate average tasks per day this week
-const averageTasksPerDay = computed(() => {
-  if (completedThisWeek.value === 0) return 0;
-  const daysInWeek = 7;
-  return Math.round((completedThisWeek.value / daysInWeek) * 10) / 10; // Round to 1 decimal
-});
-
-// Productivity level based on completion percentage
-const productivityLevel = computed(() => {
-  const percentage = weeklyCompletionPercentage.value;
-  if (percentage >= 90) return "Excellent";
-  if (percentage >= 70) return "Good";
-  if (percentage >= 50) return "Average";
-  if (percentage >= 30) return "Low";
-  return "Poor";
-});
-
-// Debug logging (remove in production)
-onMounted(() => {
-  const { startOfWeek, endOfWeek } = getWeekBounds();
-  console.log("ProductivityStats Debug:", {
-    totalTasks: props.tasks?.length,
-    completedThisWeek: completedThisWeek.value,
-    totalThisWeek: totalThisWeek.value,
-    weeklyCompletionPercentage: weeklyCompletionPercentage.value,
-    startOfWeek: startOfWeek.toISOString(),
-    endOfWeek: endOfWeek.toISOString(),
-    sampleTasks: props.tasks?.slice(0, 3).map((t) => ({
-      title: t.title,
-      completed: t.completed,
-      createdAt: t.createdAt,
-      dueDate: t.dueDate,
-    })),
-  });
+const productivityInsights = computed(() => {
+  const insights = [];
+  if (completionRate.value >= 80) {
+    insights.push("Excellent completion rate! You're very productive.");
+  } else if (completionRate.value < 40 && totalRelevantTasks.value > 5) {
+    insights.push(
+      "Consider breaking down large tasks into smaller, manageable pieces."
+    );
+  }
+  const overdueTasks = relevantTasks.value.filter(
+    (task) =>
+      task.dueDate &&
+      new Date(task.dueDate) < new Date() &&
+      task.status !== "completed"
+  ).length;
+  if (overdueTasks > 0) {
+    insights.push(
+      `${overdueTasks} task${
+        overdueTasks > 1 ? "s are" : " is"
+      } overdue. Prioritize these first.`
+    );
+  }
+  if (insights.length === 0) {
+    insights.push(
+      "Keep up the good work! Stay consistent with your task management."
+    );
+  }
+  return insights;
 });
 </script>

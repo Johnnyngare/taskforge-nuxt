@@ -1,176 +1,173 @@
 <template>
-  <div class="p-6">
-    <div class="mb-6">
-      <h1 class="text-2xl font-bold text-white mb-2">Settings</h1>
-      <p class="text-slate-400">Customize your TaskForge experience</p>
+  <div>
+    <!-- Page Header -->
+    <div class="mb-8">
+      <h1 class="text-2xl font-bold text-gray-900">Settings</h1>
+      <p class="mt-1 text-gray-600">
+        Manage your account preferences and application settings.
+      </p>
     </div>
 
-    <div class="grid grid-cols-1 lg:grid-cols-4 gap-6">
-      <!-- Settings Navigation -->
-      <div class="lg:col-span-1">
-        <div class="bg-slate-800 rounded-xl border border-slate-700 p-1">
-          <nav class="space-y-1">
-            <button
-              class="w-full text-left px-4 py-3 bg-emerald-600 text-white rounded-lg font-medium transition-colors"
-            >
-              General
-            </button>
-            <button
-              class="w-full text-left px-4 py-3 text-slate-400 hover:text-white hover:bg-slate-700 rounded-lg transition-colors"
-            >
-              Notifications
-            </button>
-            <button
-              class="w-full text-left px-4 py-3 text-slate-400 hover:text-white hover:bg-slate-700 rounded-lg transition-colors"
-            >
-              Appearance
-            </button>
-            <button
-              class="w-full text-left px-4 py-3 text-slate-400 hover:text-white hover:bg-slate-700 rounded-lg transition-colors"
-            >
-              Privacy
-            </button>
-            <button
-              class="w-full text-left px-4 py-3 text-slate-400 hover:text-white hover:bg-slate-700 rounded-lg transition-colors"
-            >
-              Account
-            </button>
-          </nav>
+    <div class="space-y-6">
+      <!-- Profile Settings -->
+      <div class="rounded-xl border border-gray-200 bg-white p-6 shadow-sm">
+        <h2 class="mb-6 text-lg font-semibold text-gray-900">
+          Profile Information
+        </h2>
+        <form @submit.prevent="saveProfile" class="space-y-6">
+          <div class="grid grid-cols-1 gap-6 sm:grid-cols-2">
+            <div>
+              <label
+                for="profile-name"
+                class="mb-2 block text-sm font-medium text-gray-700"
+              >
+                Full Name
+              </label>
+              <FormAppInput
+                id="profile-name"
+                v-model="profileForm.name"
+                placeholder="Enter your full name"
+                required
+              />
+            </div>
+            <div>
+              <label
+                for="profile-email"
+                class="mb-2 block text-sm font-medium text-gray-700"
+              >
+                Email Address
+              </label>
+              <FormAppInput
+                id="profile-email"
+                v-model="profileForm.email"
+                type="email"
+                placeholder="Enter your email"
+                required
+              />
+            </div>
+          </div>
+          <div class="flex justify-end">
+            <FormAppButton type="submit" :disabled="savingProfile">
+              <UiSpinner v-if="savingProfile" size="sm" class="mr-2" />
+              {{ savingProfile ? "Saving..." : "Save Changes" }}
+            </FormAppButton>
+          </div>
+        </form>
+      </div>
+
+      <!-- Preferences -->
+      <div class="rounded-xl border border-gray-200 bg-white p-6 shadow-sm">
+        <h2 class="mb-6 text-lg font-semibold text-gray-900">Preferences</h2>
+        <div class="space-y-6">
+          <div class="flex items-center justify-between">
+            <div>
+              <h3 class="font-medium text-gray-900">Theme</h3>
+              <p class="text-sm text-gray-500">
+                Choose your preferred color scheme.
+              </p>
+            </div>
+            <!-- Add theme toggle logic here -->
+          </div>
+        </div>
+        <div class="mt-6 flex justify-end border-t border-gray-200 pt-6">
+          <FormAppButton @click="savePreferences" :disabled="savingPreferences">
+            <UiSpinner v-if="savingPreferences" size="sm" class="mr-2" />
+            {{ savingPreferences ? "Saving..." : "Save Preferences" }}
+          </FormAppButton>
         </div>
       </div>
 
-      <!-- Settings Content -->
-      <div class="lg:col-span-3">
-        <div class="bg-slate-800 rounded-xl border border-slate-700 p-6">
-          <h2 class="text-xl font-semibold text-white mb-6">
-            General Settings
-          </h2>
-
-          <div class="space-y-6">
-            <!-- Theme Setting -->
-            <div class="flex items-center justify-between">
-              <div>
-                <h3 class="text-white font-medium">Theme</h3>
-                <p class="text-slate-400 text-sm">
-                  Choose your preferred color scheme
-                </p>
-              </div>
-              <select
-                class="bg-slate-700 border border-slate-600 text-white rounded-lg px-3 py-2 focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
-              >
-                <option>Dark</option>
-                <option>Light</option>
-                <option>System</option>
-              </select>
-            </div>
-
-            <!-- Language Setting -->
-            <div class="flex items-center justify-between">
-              <div>
-                <h3 class="text-white font-medium">Language</h3>
-                <p class="text-slate-400 text-sm">
-                  Select your preferred language
-                </p>
-              </div>
-              <select
-                class="bg-slate-700 border border-slate-600 text-white rounded-lg px-3 py-2 focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
-              >
-                <option>English</option>
-                <option>Spanish</option>
-                <option>French</option>
-                <option>German</option>
-              </select>
-            </div>
-
-            <!-- Default Priority Setting -->
-            <div class="flex items-center justify-between">
-              <div>
-                <h3 class="text-white font-medium">Default Task Priority</h3>
-                <p class="text-slate-400 text-sm">
-                  Set the default priority for new tasks
-                </p>
-              </div>
-              <select
-                class="bg-slate-700 border border-slate-600 text-white rounded-lg px-3 py-2 focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
-              >
-                <option>Low</option>
-                <option selected>Medium</option>
-                <option>High</option>
-              </select>
-            </div>
-
-            <!-- Auto-save Setting -->
-            <div class="flex items-center justify-between">
-              <div>
-                <h3 class="text-white font-medium">Auto-save</h3>
-                <p class="text-slate-400 text-sm">
-                  Automatically save changes as you type
-                </p>
-              </div>
-              <label class="relative inline-flex items-center cursor-pointer">
-                <input type="checkbox" class="sr-only peer" checked />
-                <div
-                  class="w-11 h-6 bg-slate-600 peer-focus:ring-2 peer-focus:ring-emerald-500 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-emerald-600"
-                ></div>
-              </label>
-            </div>
-
-            <!-- Notifications Setting -->
-            <div class="flex items-center justify-between">
-              <div>
-                <h3 class="text-white font-medium">Desktop Notifications</h3>
-                <p class="text-slate-400 text-sm">
-                  Get notified about task deadlines
-                </p>
-              </div>
-              <label class="relative inline-flex items-center cursor-pointer">
-                <input type="checkbox" class="sr-only peer" checked />
-                <div
-                  class="w-11 h-6 bg-slate-600 peer-focus:ring-2 peer-focus:ring-emerald-500 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-emerald-600"
-                ></div>
-              </label>
-            </div>
-
-            <!-- Time Format Setting -->
-            <div class="flex items-center justify-between">
-              <div>
-                <h3 class="text-white font-medium">Time Format</h3>
-                <p class="text-slate-400 text-sm">
-                  Choose 12-hour or 24-hour time display
-                </p>
-              </div>
-              <select
-                class="bg-slate-700 border border-slate-600 text-white rounded-lg px-3 py-2 focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
-              >
-                <option>12-hour (AM/PM)</option>
-                <option>24-hour</option>
-              </select>
-            </div>
+      <!-- Danger Zone -->
+      <div class="rounded-xl border border-red-200 bg-white p-6 shadow-sm">
+        <h2 class="mb-6 text-lg font-semibold text-red-900">Danger Zone</h2>
+        <div
+          class="flex items-center justify-between rounded-lg border border-red-200 p-4"
+        >
+          <div>
+            <h3 class="font-medium text-gray-900">Delete Account</h3>
+            <p class="text-sm text-gray-500">
+              Permanently delete your account and all data.
+            </p>
           </div>
+          <FormAppButton @click="showDeleteModal = true" variant="danger">
+            Delete Account
+          </FormAppButton>
+        </div>
+      </div>
+    </div>
 
-          <div
-            class="mt-8 pt-6 border-t border-slate-700 flex items-center space-x-3"
+    <!-- Delete Account Modal -->
+    <div
+      v-if="showDeleteModal"
+      class="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50 p-4"
+    >
+      <div class="w-full max-w-md rounded-xl bg-white p-6 shadow-xl">
+        <h3 class="mb-4 text-lg font-semibold text-gray-900">Delete Account</h3>
+        <p class="mb-6 text-gray-600">
+          This action is irreversible and will permanently delete your account.
+        </p>
+        <div class="flex gap-3">
+          <FormAppButton
+            @click="showDeleteModal = false"
+            variant="secondary"
+            class="flex-1"
           >
-            <button
-              class="bg-emerald-600 hover:bg-emerald-700 text-white px-6 py-2 rounded-lg font-medium transition-colors"
-            >
-              Save Changes
-            </button>
-            <button
-              class="text-slate-400 hover:text-white px-6 py-2 rounded-lg transition-colors"
-            >
-              Reset to Defaults
-            </button>
-          </div>
+            Cancel
+          </FormAppButton>
+          <FormAppButton
+            @click="deleteAccount"
+            variant="danger"
+            class="flex-1"
+            :disabled="deletingAccount"
+          >
+            <UiSpinner v-if="deletingAccount" size="sm" class="mr-2" />
+            {{ deletingAccount ? "Deleting..." : "Confirm Delete" }}
+          </FormAppButton>
         </div>
       </div>
     </div>
   </div>
 </template>
 
-<script setup lang="ts">
-definePageMeta({
-  middleware: "auth",
-  layout: "dashboard",
+<script setup>
+import { ref } from "vue";
+
+definePageMeta({ layout: "dashboard", middleware: "auth" });
+useSeoMeta({
+  title: "Settings - TaskForge",
+  description: "Manage your account settings and preferences.",
 });
+
+const profileForm = ref({
+  name: "John Doe",
+  email: "john.doe@example.com",
+});
+
+const savingProfile = ref(false);
+const savingPreferences = ref(false);
+const showDeleteModal = ref(false);
+const deletingAccount = ref(false);
+
+const saveProfile = async () => {
+  savingProfile.value = true;
+  await new Promise((resolve) => setTimeout(resolve, 1000));
+  console.log("Saving profile:", profileForm.value);
+  savingProfile.value = false;
+};
+
+const savePreferences = async () => {
+  savingPreferences.value = true;
+  await new Promise((resolve) => setTimeout(resolve, 800));
+  console.log("Saving preferences...");
+  savingPreferences.value = false;
+};
+
+const deleteAccount = async () => {
+  deletingAccount.value = true;
+  await new Promise((resolve) => setTimeout(resolve, 2000));
+  console.log("Deleting account...");
+  deletingAccount.value = false;
+  showDeleteModal.value = false;
+  await navigateTo("/login");
+};
 </script>
