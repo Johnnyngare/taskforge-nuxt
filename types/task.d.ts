@@ -1,10 +1,14 @@
 // types/task.d.ts
+
+export type TaskStatus = "pending" | "in_progress" | "completed" | "cancelled";
+export type TaskPriority = "Low" | "Medium" | "High" | "Urgent";
+
 export interface ITask {
   _id: string;
   title: string;
   description?: string;
-  status: "pending" | "completed"; // Match backend enum exactly
-  priority: "Low" | "Medium" | "High"; // Match backend enum exactly (capitalized)
+  status: TaskStatus;
+  priority: TaskPriority;
   dueDate?: string; // ISO date string
   projectId?: string;
   createdAt: string;

@@ -221,7 +221,6 @@ onMounted(() => {
   window.addEventListener("resize", handleResize);
 });
 
-// FIX: Corrected typo from onUnUnmounted to onUnmounted
 onUnmounted(() => {
   window.removeEventListener("resize", handleResize);
 });

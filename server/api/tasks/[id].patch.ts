@@ -1,58 +1,70 @@
 // server/api/tasks/[id].patch.ts
+
 import mongoose from "mongoose";
+import { z } from "zod";
 import { TaskModel } from "~/server/db/models/task";
 import { defineEventHandler, readBody, createError } from "h3";
+
+// Zod schema for validating the incoming update payload
+const taskUpdateSchema = z
+  .object({
+    title: z.string().min(1, "Title cannot be empty.").optional(),
+    description: z.string().optional(),
+    status: z
+      .enum(["pending", "in_progress", "completed", "cancelled"])
+      .optional(),
+    priority: z.enum(["Low", "Medium", "High", "Urgent"]).optional(),
+    dueDate: z.string().datetime().optional().or(z.literal("")), // Allow empty string to unset date
+    projectId: z.string().optional(),
+  })
+  .strict(); // Disallow any extra fields
 
 export default defineEventHandler(async (event) => {
   const taskId = event.context.params?.id;
   const body = await readBody(event);
 
-  // 1. Validate the Task ID from the URL parameters
+  // 1. Validate Task ID
   if (!taskId || !mongoose.Types.ObjectId.isValid(taskId)) {
+    throw createError({ statusCode: 400, message: "Invalid Task ID" });
+  }
+
+  // 2. Validate request body
+  const validation = taskUpdateSchema.safeParse(body);
+  if (!validation.success) {
     throw createError({
       statusCode: 400,
-      message: "Invalid Task ID provided.",
+      message: "Invalid update data.",
+      data: validation.error.errors,
     });
   }
 
-  // 2. Prepare updates, handling the projectId conversion
-  const updates: any = { ...body };
-  if (updates.projectId) {
-    if (!mongoose.Types.ObjectId.isValid(updates.projectId)) {
-      throw createError({
-        statusCode: 400,
-        message: "Invalid Project ID format in request body.",
-      });
-    }
-    updates.projectId = new mongoose.Types.ObjectId(updates.projectId);
-  } else if (updates.projectId === null) {
-    // Allow un-assigning a task from a project
-    updates.projectId = undefined;
+  const updates = validation.data;
+
+  // Handle unsetting optional fields
+  if (updates.description === "") {
+    updates.description = undefined;
+  }
+  if (updates.dueDate === "") {
+    updates.dueDate = undefined;
   }
 
   try {
-    // 3. Find and update the task in the database
+    // 3. Find and update the task
     const updatedTask = await TaskModel.findByIdAndUpdate(taskId, updates, {
       new: true, // Return the updated document
+      runValidators: true, // Run Mongoose schema validators
     });
 
     if (!updatedTask) {
-      throw createError({
-        statusCode: 404,
-        message: "Task not found.",
-      });
+      throw createError({ statusCode: 404, message: "Task not found" });
     }
 
     return updatedTask;
   } catch (error: any) {
-    // Re-throw H3 errors
-    if (error.statusCode) {
-      throw error;
-    }
     console.error("Error updating task:", error);
     throw createError({
       statusCode: 500,
-      message: "An unexpected error occurred while updating the task.",
+      message: "An error occurred while updating the task.",
     });
   }
 });

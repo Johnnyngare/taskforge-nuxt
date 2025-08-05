@@ -1,4 +1,3 @@
-// server/api/tasks/index.post.ts
 import { z } from "zod";
 import mongoose from "mongoose";
 import { connectDB } from "~/server/db";
@@ -15,7 +14,7 @@ const createTaskSchema = z.object({
 export default defineEventHandler(async (event) => {
   // Connect to database
   await connectDB();
-  
+
   const body = await readBody(event);
 
   try {
@@ -29,7 +28,7 @@ export default defineEventHandler(async (event) => {
     };
 
     const task = await TaskModel.create(taskToCreate);
-    
+
     // Set status code and return the created task
     setResponseStatus(event, 201);
     return task;
@@ -41,7 +40,7 @@ export default defineEventHandler(async (event) => {
         data: error.flatten().fieldErrors,
       });
     }
-    
+
     console.error("Error creating task:", error);
     throw createError({
       statusCode: 500,
