@@ -1,3 +1,4 @@
+<!-- components/TaskList.vue -->
 <template>
   <div class="space-y-3">
     <div
@@ -14,7 +15,7 @@
     <template v-else>
       <TaskCard
         v-for="task in tasks"
-        :key="task._id"
+        :key="task.id"
         :task="task"
         @status-changed="handleStatusChanged"
         @edit="handleEdit"
@@ -24,17 +25,13 @@
   </div>
 </template>
 
-<!-- FIX: Switched to TypeScript with lang="ts" -->
 <script setup lang="ts">
-// FIX: Import ITask for strong typing
 import type { ITask } from "~/types/task";
 
-// FIX: Use strongly typed props
 const props = defineProps<{
   tasks: ITask[];
 }>();
 
-// FIX: Use strongly typed emits for better type inference in the parent
 const emit = defineEmits<{
   (e: "task-updated", taskId: string, updates: Partial<ITask>): void;
   (e: "task-deleted", taskId: string): void;

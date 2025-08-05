@@ -1,6 +1,5 @@
-<!-- components/task/TaskCard.vue -->
+<!-- components/TaskCard.vue -->
 <template>
-  <!-- NEW: Added ref="cardRef" for the click-outside functionality -->
   <div
     ref="cardRef"
     class="group rounded-xl border border-slate-700 bg-slate-800 p-4 shadow-md transition-all duration-200 hover:border-emerald-500"
@@ -36,13 +35,17 @@
           >
             <Icon
               :name="
-                task.status === 'completed'
+                task.status === TaskStatus.Completed
                   ? 'heroicons:arrow-uturn-left'
                   : 'heroicons:check'
               "
               class="h-4 w-4"
             />
-            {{ task.status === "completed" ? "Mark Pending" : "Mark Complete" }}
+            {{
+              task.status === TaskStatus.Completed
+                ? "Mark Pending"
+                : "Mark Complete"
+            }}
           </button>
           <button
             @click="handleEdit"
@@ -64,7 +67,6 @@
     </div>
 
     <div class="mt-3 mb-4 flex flex-wrap items-center gap-2">
-      <!-- Assuming TaskPriorityBadge exists and works -->
       <TaskPriorityBadge :priority="task.priority" />
       <span
         class="inline-flex items-center rounded-full px-2 py-1 text-xs font-medium"
@@ -97,20 +99,15 @@
   </div>
 </template>
 
-<!-- FIX: Switched to TypeScript with lang="ts" -->
 <script setup lang="ts">
 import { ref, computed } from "vue";
-// NEW: Import from @vueuse/core for robust click-outside detection
 import { onClickOutside } from "@vueuse/core";
-// FIX: Import ITask and other types for strong typing
-import type { ITask, TaskStatus } from "~/types/task";
+import { TaskStatus, type ITask } from "~/types/task";
 
-// FIX: Use strongly typed props
 const props = defineProps<{
   task: ITask;
 }>();
 
-// FIX: Use strongly typed emits
 const emit = defineEmits<{
   (e: "edit", id: string): void;
   (e: "delete", id: string): void;
@@ -118,43 +115,39 @@ const emit = defineEmits<{
 }>();
 
 const showDropdown = ref(false);
-// NEW: Create a template ref for the component's root element
 const cardRef = ref<HTMLElement | null>(null);
 
-// NEW: Use @vueuse/core's onClickOutside for a reliable, SSR-safe implementation
 onClickOutside(cardRef, () => {
   showDropdown.value = false;
 });
 
-// FIX: This computed property is now fully type-safe.
 const statusInfo = computed(() => {
   const statuses: Record<
     TaskStatus,
     { label: string; classes: string; dot: string }
   > = {
-    pending: {
+    [TaskStatus.Pending]: {
       label: "Pending",
       classes: "bg-amber-500/10 text-amber-400",
       dot: "bg-amber-500",
     },
-    in_progress: {
+    [TaskStatus.InProgress]: {
       label: "In Progress",
       classes: "bg-blue-500/10 text-blue-400",
       dot: "bg-blue-500",
     },
-    completed: {
+    [TaskStatus.Completed]: {
       label: "Completed",
       classes: "bg-emerald-500/10 text-emerald-400",
       dot: "bg-emerald-500",
     },
-    cancelled: {
+    [TaskStatus.Cancelled]: {
       label: "Cancelled",
       classes: "bg-rose-500/10 text-rose-400",
       dot: "bg-rose-500",
     },
   };
-  // FIX: Safely access the status, providing a fallback if the status is invalid
-  return statuses[props.task.status] || statuses.pending;
+  return statuses[props.task.status] || statuses[TaskStatus.Pending];
 });
 
 const statusClasses = computed(() => statusInfo.value.classes);
@@ -162,11 +155,10 @@ const statusDotClasses = computed(() => statusInfo.value.dot);
 const statusLabel = computed(() => statusInfo.value.label);
 
 const dueDateClasses = computed(() => {
-  if (!props.task.dueDate || props.task.status === "completed") {
+  if (!props.task.dueDate || props.task.status === TaskStatus.Completed) {
     return "text-slate-400";
   }
   const dueDate = new Date(props.task.dueDate);
-  // FIX: Add a check for invalid dates to prevent runtime errors
   if (isNaN(dueDate.getTime())) return "text-slate-400";
 
   const today = new Date();
@@ -180,20 +172,24 @@ const dueDateClasses = computed(() => {
 const toggleDropdown = () => (showDropdown.value = !showDropdown.value);
 
 const handleEdit = () => {
-  emit("edit", props.task._id);
+  // FIX: Emit 'id' instead of '_id'
+  emit("edit", props.task.id);
   showDropdown.value = false;
 };
 
 const handleDelete = () => {
-  // The confirm dialog is better handled in the parent page.
-  emit("delete", props.task._id);
+  // FIX: Emit 'id' instead of '_id'
+  emit("delete", props.task.id);
   showDropdown.value = false;
 };
 
 const handleStatusToggle = () => {
   const newStatus: TaskStatus =
-    props.task.status === "completed" ? "pending" : "completed";
-  emit("status-changed", props.task._id, { status: newStatus });
+    props.task.status === TaskStatus.Completed
+      ? TaskStatus.Pending
+      : TaskStatus.Completed;
+  // FIX: Emit 'id' instead of '_id'
+  emit("status-changed", props.task.id, { status: newStatus });
   showDropdown.value = false;
 };
 
@@ -206,7 +202,6 @@ const formatDueDate = (dateString: string) => {
 const formatRelativeDate = (dateString: string) => {
   const date = new Date(dateString);
   if (isNaN(date.getTime())) return "";
-  // FIX: Use getTime() for reliable date arithmetic
   const diff = new Date().getTime() - date.getTime();
   const minutes = Math.floor(diff / 60000);
   if (minutes < 1) return "just now";

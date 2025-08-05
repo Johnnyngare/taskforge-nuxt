@@ -9,12 +9,12 @@ import { defineEventHandler, readBody, createError } from "h3";
 const taskUpdateSchema = z
   .object({
     title: z.string().min(1, "Title cannot be empty.").optional(),
-    description: z.string().optional(),
+    description: z.string().optional().or(z.literal("")),
     status: z
       .enum(["pending", "in_progress", "completed", "cancelled"])
       .optional(),
     priority: z.enum(["Low", "Medium", "High", "Urgent"]).optional(),
-    dueDate: z.string().datetime().optional().or(z.literal("")), // Allow empty string to unset date
+    dueDate: z.string().datetime({ message: "Invalid date format" }).optional(), // Allow empty string to unset date
     projectId: z.string().optional(),
   })
   .strict(); // Disallow any extra fields
@@ -34,7 +34,7 @@ export default defineEventHandler(async (event) => {
     throw createError({
       statusCode: 400,
       message: "Invalid update data.",
-      data: validation.error.errors,
+      data: validation.error.format(), // This gives a structured error object
     });
   }
 

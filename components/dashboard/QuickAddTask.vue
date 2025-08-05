@@ -1,3 +1,4 @@
+<!-- components/dashboard/QuickAddTask.vue -->
 <template>
   <div
     class="rounded-xl border border-slate-600 bg-slate-800 p-6 shadow-sm"
@@ -66,6 +67,7 @@
             <option value="Low">Low</option>
             <option value="Medium">Medium</option>
             <option value="High">High</option>
+            <option value="Urgent">Urgent</option>
           </select>
         </div>
         <div>
@@ -109,18 +111,33 @@
   </div>
 </template>
 
-<script setup>
+<script setup lang="ts">
 import { ref, computed } from "vue";
+import { useTasks } from "~/composables/useTasks";
+// FIX: Import from the new shared types file
+import { TaskPriority, TaskStatus, type ITask } from "~/types/task";
 
 const { createTask } = useTasks();
+const toast = useToast();
 
-const emit = defineEmits(["task-created", "close"]);
+const emit = defineEmits<{
+  (e: "task-created"): void;
+  (e: "close"): void;
+}>();
 
 const submitting = ref(false);
-const form = ref({
+
+interface QuickAddForm {
+  title: string;
+  description: string;
+  priority: TaskPriority;
+  dueDate: string;
+}
+
+const form = ref<QuickAddForm>({
   title: "",
   description: "",
-  priority: "Medium", // Match backend enum exactly
+  priority: TaskPriority.Medium,
   dueDate: "",
 });
 
@@ -131,29 +148,35 @@ const submitTask = async () => {
 
   submitting.value = true;
   try {
-    const taskData = {
+    const taskData: Partial<ITask> = {
       title: form.value.title.trim(),
       description: form.value.description.trim() || undefined,
       priority: form.value.priority,
-      dueDate: form.value.dueDate || undefined,
-      status: "pending", // Default status for new tasks
+      status: TaskStatus.Pending,
+      dueDate: form.value.dueDate
+        ? new Date(`${form.value.dueDate}T00:00:00`).toISOString()
+        : undefined,
     };
 
     await createTask(taskData);
     emit("task-created");
 
-    // Reset form after successful creation
     form.value = {
       title: "",
       description: "",
-      priority: "Medium",
+      priority: TaskPriority.Medium,
       dueDate: "",
     };
 
     emit("close");
-  } catch (error) {
+  } catch (error: any) {
     console.error("Error creating task:", error);
-    // You might want to show a user-friendly error message here
+    toast.add({
+      title: "Error creating task",
+      description: error.data?.message || "An unexpected error occurred.",
+      icon: "i-heroicons-exclamation-triangle",
+      color: "red",
+    });
   } finally {
     submitting.value = false;
   }

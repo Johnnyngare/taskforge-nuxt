@@ -1,4 +1,4 @@
-<!-- components/task/TaskEditModal.vue -->
+<!-- components/TaskEditModal.vue -->
 <template>
   <div
     class="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50 p-4"
@@ -24,7 +24,6 @@
 
         <div class="space-y-6 p-6">
           <div>
-            <!-- FIX: Use bound ID for hydration safety -->
             <label
               :for="titleId"
               class="mb-2 block text-sm font-medium text-slate-300"
@@ -40,7 +39,6 @@
             />
           </div>
           <div>
-            <!-- FIX: Use bound ID for hydration safety -->
             <label
               :for="descriptionId"
               class="mb-2 block text-sm font-medium text-slate-300"
@@ -56,7 +54,6 @@
           </div>
           <div class="grid grid-cols-1 gap-6 sm:grid-cols-2">
             <div>
-              <!-- FIX: Use bound ID for hydration safety -->
               <label
                 :for="statusId"
                 class="mb-2 block text-sm font-medium text-slate-300"
@@ -75,7 +72,6 @@
               </select>
             </div>
             <div>
-              <!-- FIX: Use bound ID for hydration safety -->
               <label
                 :for="priorityId"
                 class="mb-2 block text-sm font-medium text-slate-300"
@@ -95,7 +91,6 @@
             </div>
           </div>
           <div>
-            <!-- FIX: Use bound ID for hydration safety -->
             <label
               :for="dueDateId"
               class="mb-2 block text-sm font-medium text-slate-300"
@@ -134,50 +129,61 @@
   </div>
 </template>
 
-<!-- FIX: Switched to TypeScript with lang="ts" -->
 <script setup lang="ts">
 import { ref, watch, onMounted, onUnmounted } from "vue";
-// FIX: Import ITask for strong typing
-import type { ITask } from "~/types/task";
+import { TaskPriority, TaskStatus, type ITask } from "~/types/task";
 
-// NEW: useId generates SSR-safe, unique IDs to prevent hydration mismatch
 const titleId = useId();
 const descriptionId = useId();
 const statusId = useId();
 const priorityId = useId();
 const dueDateId = useId();
 
-// FIX: Use strongly typed props
 const props = defineProps<{
   task: ITask;
 }>();
 
-// FIX: Use strongly typed emits
 const emit = defineEmits<{
   (e: "save", taskId: string, updates: Partial<ITask>): void;
   (e: "cancel"): void;
 }>();
 
 const submitting = ref(false);
-// FIX: Strongly type the form ref for type safety and autocompletion
-const form = ref<Partial<ITask> & { dueDate?: string }>({});
 
-// This watch effect is now fully type-safe
+interface EditForm {
+  id: string; // FIX: Changed from _id to id
+  title: string;
+  description?: string | null;
+  status: TaskStatus;
+  priority: TaskPriority;
+  dueDate?: string | null;
+  projectId?: string | null;
+}
+
+const form = ref<EditForm>({
+  id: "", // FIX: Changed from _id to id
+  title: "",
+  description: null,
+  status: TaskStatus.Pending,
+  priority: TaskPriority.Medium,
+  dueDate: null,
+  projectId: null,
+});
+
 watch(
   () => props.task,
   (newTask) => {
     if (newTask) {
       form.value = {
-        _id: newTask._id,
+        id: newTask.id, // FIX: Changed from _id to id
         title: newTask.title || "",
-        description: newTask.description || "",
-        status: newTask.status || "pending",
-        priority: newTask.priority || "Medium",
-        // Format date for <input type="date">, which needs YYYY-MM-DD
+        description: newTask.description || null,
+        status: newTask.status || TaskStatus.Pending,
+        priority: newTask.priority || TaskPriority.Medium,
         dueDate: newTask.dueDate
           ? new Date(newTask.dueDate).toISOString().split("T")[0]
-          : "",
-        projectId: newTask.projectId || undefined,
+          : null,
+        projectId: newTask.projectId || null,
       };
     }
   },
@@ -185,20 +191,31 @@ watch(
 );
 
 const handleSubmit = async () => {
-  if (!form.value.title?.trim() || submitting.value || !form.value._id) return;
+  if (!form.value.title?.trim() || submitting.value || !form.value.id) return;
 
   submitting.value = true;
   try {
-    // Create a clean payload to send to the API
     const payload: Partial<ITask> = {
       title: form.value.title,
-      description: form.value.description,
+      description: form.value.description?.trim() || undefined,
       status: form.value.status,
       priority: form.value.priority,
-      dueDate: form.value.dueDate,
+      dueDate: form.value.dueDate
+        ? new Date(`${form.value.dueDate}T00:00:00`).toISOString()
+        : undefined,
+      projectId: form.value.projectId || undefined,
     };
 
-    emit("save", form.value._id, payload);
+    Object.keys(payload).forEach((key) => {
+      // @ts-ignore
+      if (payload[key] === undefined) {
+        // @ts-ignore
+        delete payload[key];
+      }
+    });
+
+    // FIX: Emit 'id' instead of '_id'
+    emit("save", form.value.id, payload);
   } catch (error) {
     console.error("Error preparing task updates:", error);
   } finally {
@@ -213,19 +230,3 @@ onMounted(() => {
   onUnmounted(() => document.removeEventListener("keydown", handleEscape));
 });
 </script>
-
-<style scoped>
-@keyframes zoom-in {
-  from {
-    opacity: 0;
-    transform: scale(0.95);
-  }
-  to {
-    opacity: 1;
-    transform: scale(1);
-  }
-}
-.animate-in {
-  animation: zoom-in 0.3s ease-out;
-}
-</style>
