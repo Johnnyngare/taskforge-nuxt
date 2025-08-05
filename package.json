@@ -25,6 +25,8 @@
     "@iconify-json/simple-icons": "^1.2.45",
     "@nuxt/test-utils": "^3.12.3",
     "@pinia/nuxt": "^0.5.1",
+    "@types/bcrypt": "^6.0.0",
+    "@types/jsonwebtoken": "^9.0.10",
     "@vue/test-utils": "^2.4.6",
     "@vueuse/motion": "^2.1.0",
     "cross-env": "^10.0.0",

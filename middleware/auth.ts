@@ -1,9 +1,11 @@
-// middleware/auth.ts
-export default defineNuxtRouteMiddleware((to, from) => {
-  const { user } = useAuth(); // We will create this composable next
+export default defineNuxtRouteMiddleware((to) => {
+  const { isAuthenticated } = useAuth();
 
-  if (!user.value) {
-    // If user is not logged in, redirect to login page
-    return navigateTo("/login", { replace: true });
+  // Simple check - no async operations needed since plugin already ran
+  if (!isAuthenticated.value) {
+    const publicRoutes = ['/login', '/register', '/forgot-password', '/'];
+    if (!publicRoutes.includes(to.path)) {
+      return navigateTo('/login', { replace: true });
+    }
   }
 });

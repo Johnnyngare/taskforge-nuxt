@@ -35,7 +35,7 @@ const props = defineProps({
   },
   color: {
     type: String,
-    default: "current", // 'current', 'white', or a color name like 'blue'
+    default: "current", // 'current', 'white', 'emerald', 'blue', 'amber', 'rose'
   },
 });
 
@@ -53,7 +53,6 @@ const sizeClass = computed(
 const colorClass = computed(() => {
   if (props.color === "current") return "text-current";
   if (props.color === "white") return "text-white";
-  // Assumes tailwind color like 'blue', 'green', etc.
-  return `text-${props.color}-600`;
+  return `text-${props.color}-500`; // Use -500 for general color text
 });
 </script>

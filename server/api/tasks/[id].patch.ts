@@ -1,85 +1,58 @@
-import { TaskModel } from "~/server/db/models/task.ts"; // Correct import path
-import mongoose from "mongoose"; // Needed for ObjectId validation
-import { z } from "zod"; // If you want to use Zod for body validation
-
-// Optional: Define a Zod schema for PATCH updates if your updates are complex
-// For simplicity, we'll assume body can contain title, description, status, dueDate, projectId
-// If status can only be 'pending'/'completed', you'd validate that.
-const updateTaskSchema = z
-  .object({
-    title: z.string().min(1).optional(),
-    description: z.string().optional(),
-    status: z.enum(["pending", "completed"]).optional(),
-    dueDate: z.string().datetime().optional().or(z.literal(null)),
-    projectId: z.string().optional().nullable(),
-    // Add other fields that can be updated
-  })
-  .refine((data) => {
-    // Custom validation for projectId if provided
-    if (data.projectId && !mongoose.Types.ObjectId.isValid(data.projectId)) {
-      throw new z.ZodError([
-        {
-          code: "custom",
-          message: "Invalid Project ID format",
-          path: ["projectId"],
-        },
-      ]);
-    }
-    return true;
-  });
+// server/api/tasks/[id].patch.ts
+import mongoose from "mongoose";
+import { TaskModel } from "~/server/db/models/task";
+import { defineEventHandler, readBody, createError } from "h3";
 
 export default defineEventHandler(async (event) => {
-  const taskId = event.context.params?.id as string; // Safely access .id and cast
+  const taskId = event.context.params?.id;
   const body = await readBody(event);
 
-  // 1. Validate taskId first
+  // 1. Validate the Task ID from the URL parameters
   if (!taskId || !mongoose.Types.ObjectId.isValid(taskId)) {
-    event.node.res.statusCode = 400;
-    return { error: "Invalid Task ID provided" };
+    throw createError({
+      statusCode: 400,
+      message: "Invalid Task ID provided.",
+    });
+  }
+
+  // 2. Prepare updates, handling the projectId conversion
+  const updates: any = { ...body };
+  if (updates.projectId) {
+    if (!mongoose.Types.ObjectId.isValid(updates.projectId)) {
+      throw createError({
+        statusCode: 400,
+        message: "Invalid Project ID format in request body.",
+      });
+    }
+    updates.projectId = new mongoose.Types.ObjectId(updates.projectId);
+  } else if (updates.projectId === null) {
+    // Allow un-assigning a task from a project
+    updates.projectId = undefined;
   }
 
   try {
-    // 2. Optional: Validate body with Zod
-    // const validatedBody = updateTaskSchema.parse(body); // Uncomment if using Zod
-
-    // Prepare updates, converting projectId string to ObjectId if present
-    const updates: any = { ...body }; // Start with all body fields
-    if (updates.projectId) {
-      // Convert to ObjectId if it exists and is a valid format
-      if (mongoose.Types.ObjectId.isValid(updates.projectId)) {
-        updates.projectId = new mongoose.Types.ObjectId(updates.projectId);
-      } else {
-        // Handle case where projectId is provided but invalid
-        event.node.res.statusCode = 400;
-        return { error: "Invalid Project ID format in request body" };
-      }
-    } else if (updates.projectId === null) {
-      // Allow setting projectId to null/undefined to unassign
-      updates.projectId = undefined;
-    }
-
+    // 3. Find and update the task in the database
     const updatedTask = await TaskModel.findByIdAndUpdate(taskId, updates, {
-      new: true,
+      new: true, // Return the updated document
     });
 
     if (!updatedTask) {
-      event.node.res.statusCode = 404;
-      return { error: "Task not found" };
+      throw createError({
+        statusCode: 404,
+        message: "Task not found.",
+      });
     }
 
     return updatedTask;
   } catch (error: any) {
-    // Handle Zod validation errors for body
-    if (error instanceof z.ZodError) {
-      // Uncomment if using Zod
-      event.node.res.statusCode = 400;
-      return {
-        error: "Validation failed",
-        details: error.flatten().fieldErrors,
-      };
+    // Re-throw H3 errors
+    if (error.statusCode) {
+      throw error;
     }
     console.error("Error updating task:", error);
-    event.node.res.statusCode = 500;
-    return { error: "Internal Server Error", message: error.message };
+    throw createError({
+      statusCode: 500,
+      message: "An unexpected error occurred while updating the task.",
+    });
   }
 });

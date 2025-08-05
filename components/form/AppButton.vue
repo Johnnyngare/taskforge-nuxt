@@ -5,33 +5,14 @@
     :class="buttonClasses"
     @click="handleClick"
   >
-    <span v-if="loading" class="animate-spin mr-2">
-      <svg
-        class="w-4 h-4"
-        fill="none"
-        stroke="currentColor"
-        viewBox="0 0 24 24"
-      >
-        <circle
-          class="opacity-25"
-          cx="12"
-          cy="12"
-          r="10"
-          stroke="currentColor"
-          stroke-width="4"
-        ></circle>
-        <path
-          class="opacity-75"
-          fill="currentColor"
-          d="m4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
-        ></path>
-      </svg>
-    </span>
+    <UiSpinner v-if="loading" size="sm" class="mr-2" :color="spinnerColor" />
     <slot>{{ label }}</slot>
   </button>
 </template>
 
 <script setup lang="ts">
+import { computed } from "vue"; // Explicit import
+
 interface Props {
   label?: string;
   variant?: "primary" | "secondary" | "danger" | "outline" | "ghost";
@@ -58,7 +39,7 @@ const emit = defineEmits<{
 
 const buttonClasses = computed(() => {
   const baseClasses =
-    "inline-flex items-center justify-center font-medium rounded-lg transition-colors focus:outline-none focus:ring-2 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed";
+    "inline-flex items-center justify-center font-medium rounded-lg transition-colors focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-slate-900 disabled:opacity-50 disabled:cursor-not-allowed";
 
   const sizeClasses = {
     sm: "px-3 py-1.5 text-sm",
@@ -67,12 +48,15 @@ const buttonClasses = computed(() => {
   };
 
   const variantClasses = {
-    primary: "bg-blue-600 hover:bg-blue-700 text-white focus:ring-blue-500",
-    secondary: "bg-gray-600 hover:bg-gray-700 text-white focus:ring-gray-500",
-    danger: "bg-red-600 hover:bg-red-700 text-white focus:ring-red-500",
+    primary:
+      "bg-emerald-500 hover:bg-emerald-600 text-white focus:ring-emerald-500",
+    secondary:
+      "bg-slate-700 hover:bg-slate-600 text-white focus:ring-slate-500",
+    danger: "bg-rose-600 hover:bg-rose-700 text-white focus:ring-rose-500",
     outline:
-      "border border-gray-300 hover:bg-gray-50 text-gray-700 focus:ring-blue-500",
-    ghost: "hover:bg-gray-100 text-gray-700 focus:ring-gray-500",
+      "border border-border text-slate-200 hover:bg-surface-alt focus:ring-emerald-500",
+    ghost:
+      "hover:bg-slate-700 text-slate-400 hover:text-white focus:ring-slate-500",
   };
 
   const blockClass = props.block ? "w-full" : "";
@@ -85,6 +69,12 @@ const buttonClasses = computed(() => {
   ]
     .filter(Boolean)
     .join(" ");
+});
+
+const spinnerColor = computed(() => {
+  // Determine spinner color based on button variant
+  if (props.variant === "primary" || props.variant === "danger") return "white";
+  return "current"; // Inherit text color for other variants
 });
 
 const handleClick = (event: MouseEvent) => {

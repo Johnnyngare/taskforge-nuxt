@@ -1,6 +1,6 @@
 <template>
   <div
-    class="mb-6 rounded-xl bg-gradient-to-r from-blue-600 to-blue-700 p-6 text-white shadow-lg"
+    class="mb-6 rounded-xl bg-gradient-to-r from-emerald-600 to-emerald-700 p-6 text-white shadow-lg"
   >
     <div
       class="flex flex-col items-start justify-between lg:flex-row lg:items-center"
@@ -9,7 +9,7 @@
         <h1 class="mb-2 text-2xl font-bold lg:text-3xl">
           {{ welcomeMessage }}
         </h1>
-        <p class="text-lg text-blue-100">
+        <p class="text-lg text-emerald-100">
           {{ motivationalMessage }}
         </p>
       </div>
@@ -21,39 +21,41 @@
           <div class="mb-1 text-2xl font-bold lg:text-3xl">
             {{ totalTasks }}
           </div>
-          <div class="text-sm font-medium text-blue-200">Total Tasks</div>
+          <div class="text-sm font-medium text-emerald-200">Total Tasks</div>
         </div>
         <div class="text-center">
-          <div class="mb-1 text-2xl font-bold text-green-300 lg:text-3xl">
+          <div class="mb-1 text-2xl font-bold text-white lg:text-3xl">
             {{ completedToday }}
           </div>
-          <div class="text-sm font-medium text-blue-200">Completed</div>
+          <div class="text-sm font-medium text-emerald-200">
+            Completed Today
+          </div>
         </div>
         <div class="text-center">
-          <div class="mb-1 text-2xl font-bold text-yellow-300 lg:text-3xl">
+          <div class="mb-1 text-2xl font-bold text-amber-300 lg:text-3xl">
             {{ dueToday }}
           </div>
-          <div class="text-sm font-medium text-blue-200">Due Today</div>
+          <div class="text-sm font-medium text-emerald-200">Due Today</div>
         </div>
         <div class="text-center">
-          <div class="mb-1 text-2xl font-bold text-red-300 lg:text-3xl">
+          <div class="mb-1 text-2xl font-bold text-rose-300 lg:text-3xl">
             {{ overdue }}
           </div>
-          <div class="text-sm font-medium text-blue-200">Overdue</div>
+          <div class="text-sm font-medium text-emerald-200">Overdue</div>
         </div>
       </div>
     </div>
 
-    <div class="mt-6 border-t border-blue-500 pt-4">
+    <div class="mt-6 border-t border-emerald-500 pt-4">
       <div class="mb-2 flex items-center justify-between">
-        <span class="text-sm font-medium text-blue-100">Daily Progress</span>
+        <span class="text-sm font-medium text-emerald-100">Daily Progress</span>
         <span class="text-sm font-semibold text-white">
           {{ Math.round(dailyCompletionRate) }}%
         </span>
       </div>
-      <div class="h-3 w-full rounded-full bg-blue-500">
+      <div class="h-3 w-full rounded-full bg-emerald-500">
         <div
-          class="h-3 rounded-full bg-gradient-to-r from-green-400 to-green-500 transition-all duration-500 ease-out"
+          class="h-3 rounded-full bg-white transition-all duration-500 ease-out"
           :style="{ width: `${dailyCompletionRate}%` }"
         ></div>
       </div>

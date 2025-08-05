@@ -1,13 +1,13 @@
 <template>
   <div
-    class="rounded-xl border border-gray-200 bg-white p-6 shadow-sm"
+    class="rounded-xl border border-slate-600 bg-slate-800 p-6 shadow-sm"
     @keydown.esc="$emit('close')"
   >
     <div class="mb-4 flex items-center justify-between">
-      <h3 class="text-lg font-semibold text-gray-900">Quick Add Task</h3>
+      <h3 class="text-lg font-semibold text-slate-200">Quick Add Task</h3>
       <button
         @click="$emit('close')"
-        class="p-1 text-gray-400 transition-colors hover:text-gray-600"
+        class="p-1 text-slate-400 transition-colors hover:text-slate-200"
         title="Close"
       >
         <Icon name="heroicons:x-mark" class="h-5 w-5" />
@@ -18,7 +18,7 @@
       <div>
         <label
           for="quick-title"
-          class="mb-1 block text-sm font-medium text-gray-700"
+          class="mb-1 block text-sm font-medium text-slate-300"
         >
           Task Title
         </label>
@@ -32,29 +32,46 @@
         />
       </div>
 
+      <div>
+        <label
+          for="quick-description"
+          class="mb-1 block text-sm font-medium text-slate-300"
+        >
+          Description (optional)
+        </label>
+        <textarea
+          id="quick-description"
+          v-model="form.description"
+          placeholder="Add more details about this task..."
+          rows="2"
+          class="w-full rounded-lg border border-slate-600 bg-slate-700 px-3 py-2 text-slate-200 placeholder-slate-400 transition-colors focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20"
+          :disabled="submitting"
+        />
+      </div>
+
       <div class="grid grid-cols-1 gap-4 sm:grid-cols-2">
         <div>
           <label
             for="quick-priority"
-            class="mb-1 block text-sm font-medium text-gray-700"
+            class="mb-1 block text-sm font-medium text-slate-300"
           >
             Priority
           </label>
           <select
             id="quick-priority"
             v-model="form.priority"
-            class="w-full rounded-lg border border-gray-300 px-3 py-2 transition-colors focus:border-blue-500 focus:ring-2 focus:ring-blue-500"
+            class="w-full rounded-lg border border-slate-600 bg-slate-700 px-3 py-2 text-slate-200 transition-colors focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20"
             :disabled="submitting"
           >
-            <option value="low">Low</option>
-            <option value="medium">Medium</option>
-            <option value="high">High</option>
+            <option value="Low">Low</option>
+            <option value="Medium">Medium</option>
+            <option value="High">High</option>
           </select>
         </div>
         <div>
           <label
             for="quick-due-date"
-            class="mb-1 block text-sm font-medium text-gray-700"
+            class="mb-1 block text-sm font-medium text-slate-300"
           >
             Due Date
           </label>
@@ -62,7 +79,7 @@
             id="quick-due-date"
             v-model="form.dueDate"
             type="date"
-            class="w-full rounded-lg border border-gray-300 px-3 py-2 transition-colors focus:border-blue-500 focus:ring-2 focus:ring-blue-500"
+            class="w-full rounded-lg border border-slate-600 bg-slate-700 px-3 py-2 text-slate-200 transition-colors focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20"
             :disabled="submitting"
             :min="today"
           />
@@ -93,15 +110,17 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted } from "vue";
+import { ref, computed } from "vue";
+
+const { createTask } = useTasks();
 
 const emit = defineEmits(["task-created", "close"]);
-const { createTask } = useTasks();
 
 const submitting = ref(false);
 const form = ref({
   title: "",
-  priority: "medium",
+  description: "",
+  priority: "Medium", // Match backend enum exactly
   dueDate: "",
 });
 
@@ -109,17 +128,32 @@ const today = computed(() => new Date().toISOString().split("T")[0]);
 
 const submitTask = async () => {
   if (!form.value.title.trim() || submitting.value) return;
+
   submitting.value = true;
   try {
-    await createTask({
-      ...form.value,
-      status: "pending",
-    });
+    const taskData = {
+      title: form.value.title.trim(),
+      description: form.value.description.trim() || undefined,
+      priority: form.value.priority,
+      dueDate: form.value.dueDate || undefined,
+      status: "pending", // Default status for new tasks
+    };
+
+    await createTask(taskData);
     emit("task-created");
+
+    // Reset form after successful creation
+    form.value = {
+      title: "",
+      description: "",
+      priority: "Medium",
+      dueDate: "",
+    };
+
     emit("close");
   } catch (error) {
     console.error("Error creating task:", error);
-    // Optionally show a toast notification for the error
+    // You might want to show a user-friendly error message here
   } finally {
     submitting.value = false;
   }

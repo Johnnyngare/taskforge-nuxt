@@ -1,32 +1,36 @@
 // server/api/tasks/index.get.ts
-import { TaskModel } from "~/server/db/models/task.ts";
-import mongoose from "mongoose"; // Needed for ObjectId conversion
+import { TaskModel } from "~/server/db/models/task";
+import mongoose from "mongoose";
+import { defineEventHandler, getQuery, createError } from "h3";
 
 export default defineEventHandler(async (event) => {
   const query = getQuery(event);
-  const filter: { status?: string; projectId?: mongoose.Types.ObjectId } = {}; // FIX: Make projectId Type.ObjectId
+  const filter: any = {};
 
+  // Build the filter object based on query parameters
   if (query.status) {
-    filter.status = query.status as "pending" | "completed";
+    filter.status = query.status;
   }
-  // FIX: Convert projectId string from query to ObjectId for filtering
+
   if (query.projectId) {
-    // Only apply filter if it's a valid ObjectId string
-    if (mongoose.Types.ObjectId.isValid(query.projectId as string)) {
-      filter.projectId = new mongoose.Types.ObjectId(query.projectId as string);
-    } else {
-      // If an invalid projectId is provided, return a 400 error
-      event.node.res.statusCode = 400;
-      return { error: "Invalid Project ID format in query" };
+    if (!mongoose.Types.ObjectId.isValid(query.projectId as string)) {
+      throw createError({
+        statusCode: 400,
+        message: "Invalid Project ID format in query.",
+      });
     }
+    filter.projectId = new mongoose.Types.ObjectId(query.projectId as string);
   }
 
   try {
+    // Fetch tasks from the database, sorting by most recently created
     const tasks = await TaskModel.find(filter).sort({ createdAt: -1 });
     return tasks;
   } catch (error: any) {
     console.error("Error fetching tasks:", error);
-    event.node.res.statusCode = 500;
-    return { error: "Internal Server Error", message: error.message };
+    throw createError({
+      statusCode: 500,
+      message: "An unexpected error occurred while fetching tasks.",
+    });
   }
 });

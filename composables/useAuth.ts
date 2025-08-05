@@ -1,7 +1,6 @@
-// composables/useAuth.ts
-import { ref, readonly } from "vue";
+import { readonly, computed } from "vue";
+import { useState, navigateTo } from "#app";
 
-// Define a type for the user object for better type safety
 interface User {
   _id: string;
   name: string;
@@ -11,11 +10,12 @@ interface User {
 }
 
 export const useAuth = () => {
-  // `useState` is Nuxt's SSR-friendly version of `ref` for shared state
   const user = useState<User | null>("user", () => null);
   const loading = useState<boolean>("auth-loading", () => false);
+  const initialized = useState<boolean>("auth-initialized", () => false);
 
-  // --- REGISTER FUNCTION ---
+  const isAuthenticated = computed(() => !!user.value);
+
   const register = async (userData: {
     name: string;
     email: string;
@@ -23,36 +23,28 @@ export const useAuth = () => {
   }) => {
     loading.value = true;
     try {
-      // The backend will handle validation and user creation
-      return await $fetch("/api/auth/register", {
+      await $fetch("/api/auth/register", {
         method: "POST",
         body: userData,
       });
+      await fetchUser();
     } catch (error) {
-      // Re-throw the error so the page component can catch it and show a toast
       throw error;
     } finally {
       loading.value = false;
     }
   };
 
-  // --- LOGIN FUNCTION ---
   const login = async (credentials: { email: string; password: string }) => {
     loading.value = true;
     try {
-      // The login endpoint sets the cookie but doesn't return the user
       await $fetch("/api/auth/login", {
         method: "POST",
         body: credentials,
       });
-
-      // After a successful login, fetch the user's data to update the state
       await fetchUser();
-
-      // Redirect to the dashboard after successful login and user fetch
       await navigateTo("/dashboard");
     } catch (error) {
-      // Clear user state on failed login attempt
       user.value = null;
       throw error;
     } finally {
@@ -60,7 +52,6 @@ export const useAuth = () => {
     }
   };
 
-  // --- LOGOUT FUNCTION ---
   const logout = async () => {
     loading.value = true;
     try {
@@ -68,38 +59,40 @@ export const useAuth = () => {
         method: "POST",
       });
     } catch (error) {
-      console.error(
-        "Logout API call failed, but logging out client-side anyway:",
-        error
-      );
+      console.error("Logout API call failed:", error);
     } finally {
-      // Always clear user state and redirect, even if API call fails
       user.value = null;
+      initialized.value = false;
       loading.value = false;
       await navigateTo("/login");
     }
   };
 
-  // --- FETCH CURRENT USER ---
-  // This function checks if a user is already logged in (e.g., on page refresh)
   const fetchUser = async () => {
-    if (user.value) {
-      return; // Don't re-fetch if user is already in state
+    // Don't fetch if already loading or already have user data
+    if (loading.value || (initialized.value && user.value)) {
+      return;
     }
+
+    loading.value = true;
     try {
       const data = await $fetch<User>("/api/auth/me", {
         method: "GET",
-        // We don't need to manually send cookies; the browser handles it.
       });
       user.value = data;
     } catch (error) {
-      user.value = null; // If it fails (e.g., 401), ensure user is logged out
+      user.value = null;
+    } finally {
+      loading.value = false;
+      initialized.value = true;
     }
   };
 
   return {
-    user: readonly(user), // Expose user as readonly to prevent external mutation
+    user: readonly(user),
     loading: readonly(loading),
+    initialized: readonly(initialized),
+    isAuthenticated,
     register,
     login,
     logout,

@@ -1,7 +1,6 @@
-<!-- file: layouts/dashboard.vue -->
 <template>
-  <div class="flex h-screen bg-gray-50 dark:bg-gray-900">
-    <!-- Mobile sidebar backdrop (appears when sidebar is open on small screens) -->
+  <div class="flex h-screen bg-slate-900 text-slate-200">
+    <!-- Mobile sidebar backdrop -->
     <div
       v-if="sidebarOpen"
       class="fixed inset-0 z-20 bg-black bg-opacity-50 lg:hidden"
@@ -11,19 +10,20 @@
     <!-- Sidebar -->
     <aside
       :class="[
-        'fixed inset-y-0 left-0 z-30 w-64 bg-white dark:bg-gray-800 shadow-lg transform transition-transform duration-300 ease-in-out lg:translate-x-0 lg:static lg:inset-0',
-        sidebarOpen ? 'translate-x-0' : '-translate-x-full', // Controls mobile sidebar visibility
+        'fixed inset-y-0 left-0 z-30 w-64 transform transition-transform duration-300 ease-in-out lg:translate-x-0 lg:static lg:inset-0',
+        'border-r border-slate-700 bg-slate-900 shadow-lg', // Dark theme colors
+        sidebarOpen ? 'translate-x-0' : '-translate-x-full',
       ]"
     >
       <!-- Logo and App Name -->
-      <div class="flex items-center justify-center h-16 px-4 bg-emerald-600">
+      <div class="flex h-16 items-center justify-center px-4">
         <div class="flex items-center space-x-2">
           <div
-            class="w-8 h-8 bg-white rounded-lg flex items-center justify-center"
+            class="flex h-8 w-8 items-center justify-center rounded-lg bg-emerald-500"
           >
-            <span class="text-emerald-600 font-bold text-lg">⚡</span>
+            <Icon name="heroicons:bolt-solid" class="h-5 w-5 text-white" />
           </div>
-          <span class="text-white font-bold text-xl">TaskForge</span>
+          <span class="text-xl font-bold text-white">TaskForge</span>
         </div>
       </div>
 
@@ -32,106 +32,52 @@
         <div class="space-y-2">
           <NuxtLink
             to="/dashboard"
-            class="flex items-center px-4 py-3 text-gray-700 dark:text-gray-200 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
-            active-class="bg-emerald-50 text-emerald-600 dark:bg-emerald-900/20 font-semibold"
+            class="flex items-center rounded-lg px-4 py-3 text-slate-300 transition-colors hover:bg-slate-800 hover:text-white"
+            active-class="bg-emerald-500/10 text-emerald-400 font-semibold"
           >
-            <svg
-              class="w-5 h-5 mr-3"
-              fill="none"
-              stroke="currentColor"
-              viewBox="0 0 24 24"
-            >
-              <path
-                stroke-linecap="round"
-                stroke-linejoin="round"
-                stroke-width="2"
-                d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2H5a2 2 0 00-2-2z"
-              ></path>
-            </svg>
+            <Icon name="heroicons:home" class="mr-3 h-5 w-5 shrink-0" />
             Dashboard
           </NuxtLink>
 
           <NuxtLink
             to="/dashboard/tasks"
-            class="flex items-center px-4 py-3 text-gray-700 dark:text-gray-200 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
-            active-class="bg-emerald-50 text-emerald-600 dark:bg-emerald-900/20 font-semibold"
+            class="flex items-center rounded-lg px-4 py-3 text-slate-300 transition-colors hover:bg-slate-800 hover:text-white"
+            active-class="bg-emerald-500/10 text-emerald-400 font-semibold"
           >
-            <svg
-              class="w-5 h-5 mr-3"
-              fill="none"
-              stroke="currentColor"
-              viewBox="0 0 24 24"
-            >
-              <path
-                stroke-linecap="round"
-                stroke-linejoin="round"
-                stroke-width="2"
-                d="M9 5H7a2 2 0 00-2 2v10a2 2 0 002 2h8a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"
-              ></path>
-            </svg>
+            <Icon name="heroicons:list-bullet" class="mr-3 h-5 w-5 shrink-0" />
             All Tasks
           </NuxtLink>
 
           <NuxtLink
             to="/dashboard/projects"
-            class="flex items-center px-4 py-3 text-gray-700 dark:text-gray-200 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
-            active-class="bg-emerald-50 text-emerald-600 dark:bg-emerald-900/20 font-semibold"
+            class="flex items-center rounded-lg px-4 py-3 text-slate-300 transition-colors hover:bg-slate-800 hover:text-white"
+            active-class="bg-emerald-500/10 text-emerald-400 font-semibold"
           >
-            <svg
-              class="w-5 h-5 mr-3"
-              fill="none"
-              stroke="currentColor"
-              viewBox="0 0 24 24"
-            >
-              <path
-                stroke-linecap="round"
-                stroke-linejoin="round"
-                stroke-width="2"
-                d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10"
-              ></path>
-            </svg>
+            <Icon
+              name="heroicons:rectangle-stack"
+              class="mr-3 h-5 w-5 shrink-0"
+            />
             Projects
           </NuxtLink>
 
           <NuxtLink
             to="/dashboard/calendar"
-            class="flex items-center px-4 py-3 text-gray-700 dark:text-gray-200 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
-            active-class="bg-emerald-50 text-emerald-600 dark:bg-emerald-900/20 font-semibold"
+            class="flex items-center rounded-lg px-4 py-3 text-slate-300 transition-colors hover:bg-slate-800 hover:text-white"
+            active-class="bg-emerald-500/10 text-emerald-400 font-semibold"
           >
-            <svg
-              class="w-5 h-5 mr-3"
-              fill="none"
-              stroke="currentColor"
-              viewBox="0 0 24 24"
-            >
-              <path
-                stroke-linecap="round"
-                stroke-linejoin="round"
-                stroke-width="2"
-                d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2-2v16a2 2 0 002 2z"
-              ></path>
-            </svg>
+            <Icon
+              name="heroicons:calendar-days"
+              class="mr-3 h-5 w-5 shrink-0"
+            />
             Calendar
           </NuxtLink>
 
           <NuxtLink
             to="/dashboard/settings"
-            class="flex items-center px-4 py-3 text-gray-700 dark:text-gray-200 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
-            active-class="bg-emerald-50 text-emerald-600 dark:bg-emerald-900/20 font-semibold"
+            class="flex items-center rounded-lg px-4 py-3 text-slate-300 transition-colors hover:bg-slate-800 hover:text-white"
+            active-class="bg-emerald-500/10 text-emerald-400 font-semibold"
           >
-            <svg
-              class="w-5 h-5 mr-3"
-              fill="none"
-              stroke="currentColor"
-              viewBox="0 0 24 24"
-            >
-              <path
-                stroke-linecap="round"
-                stroke-linejoin="round"
-                stroke-width="2"
-                d="M10.325 4.317c.522-1.42 2.536-1.42 3.058 0L16.2 8.3c.27.73.473 1.5.602 2.278L19.5 13.5c1.42.52 1.42 2.536 0 3.058L16.8 19.7c-.73.27-1.5.473-2.278.602L13.5 22.5c-.52.0-2.536-.0-3.058 0L7.8 19.7c-.27-.73-.473-1.5-.602-2.278L4.5 13.5c-1.42-.52-1.42-2.536 0-3.058L7.2 8.3c.73-.27 1.5-.473 2.278-.602L10.325 4.317zM12 14.25a2.25 2.25 0 100-4.5 2.25 2.25 0 000 4.5z"
-              ></path>
-            </svg>
+            <Icon name="heroicons:cog-6-tooth" class="mr-3 h-5 w-5 shrink-0" />
             Settings
           </NuxtLink>
         </div>
@@ -139,70 +85,69 @@
 
       <!-- User Profile Card in Sidebar -->
       <div
-        class="absolute bottom-0 left-0 right-0 p-4 border-t border-gray-200 dark:border-gray-700"
+        class="absolute bottom-0 left-0 right-0 border-t border-slate-700 p-4"
       >
         <div class="flex items-center space-x-3">
           <div
-            class="w-10 h-10 bg-emerald-500 rounded-full flex items-center justify-center flex-shrink-0"
+            class="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-emerald-500"
           >
-            <!-- Replace with actual user avatar -->
-            <span class="text-white font-medium text-sm">JD</span>
+            <!-- Check if user.value exists before accessing properties -->
+            <span v-if="user?.name" class="text-sm font-medium text-white">{{
+              getInitials(user.name)
+            }}</span>
+            <span v-else class="text-sm font-medium text-white">JD</span>
           </div>
-          <div class="flex-1 min-w-0">
+          <div class="min-w-0 flex-1">
             <p
-              class="text-sm font-medium text-gray-900 dark:text-white truncate"
+              v-if="user?.name"
+              class="truncate text-sm font-medium text-white"
             >
+              {{ user.name }}
+            </p>
+            <p v-else class="truncate text-sm font-medium text-white">
               John Doe
             </p>
-            <p class="text-xs text-gray-500 dark:text-gray-400 truncate">
+
+            <p v-if="user?.email" class="truncate text-xs text-slate-400">
+              {{ user.email }}
+            </p>
+            <p v-else class="truncate text-xs text-slate-400">
               john@example.com
             </p>
           </div>
-          <!-- Logout button or dropdown trigger -->
-          <UButton
-            icon="i-heroicons-arrow-right-on-rectangle"
-            color="gray"
+          <!-- Logout button -->
+          <FormAppButton
             variant="ghost"
             size="sm"
-            class="flex-shrink-0"
+            class="shrink-0 text-slate-400 hover:bg-slate-700 hover:text-white"
             title="Logout"
-          />
+            @click="logout"
+          >
+            <Icon name="heroicons:arrow-right-on-rectangle" class="h-5 w-5" />
+          </FormAppButton>
         </div>
       </div>
     </aside>
 
     <!-- Main Content Area -->
-    <div class="flex-1 flex flex-col min-w-0">
+    <div class="flex min-w-0 flex-1 flex-col">
       <!-- Top Header Bar -->
       <header
-        class="bg-white dark:bg-gray-800 shadow-sm border-b border-gray-200 dark:border-gray-700 flex-shrink-0"
+        class="flex-shrink-0 border-b border-slate-700 bg-slate-900 shadow-sm"
       >
         <div class="flex items-center justify-between px-4 py-4 lg:px-6">
           <!-- Mobile menu button (hamburger) -->
           <button
             @click="sidebarOpen = !sidebarOpen"
-            class="lg:hidden p-2 rounded-md text-gray-500 hover:text-gray-600 hover:bg-gray-100 dark:hover:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-emerald-500"
+            class="rounded-md p-2 text-slate-500 transition-colors hover:bg-slate-800 hover:text-white focus:outline-none focus:ring-2 focus:ring-emerald-500 lg:hidden"
+            title="Toggle sidebar"
           >
-            <svg
-              class="w-6 h-6"
-              fill="none"
-              stroke="currentColor"
-              viewBox="0 0 24 24"
-            >
-              <path
-                stroke-linecap="round"
-                stroke-linejoin="round"
-                stroke-width="2"
-                d="M4 6h16M4 12h16M4 18h16"
-              ></path>
-            </svg>
+            <Icon name="heroicons:bars-3" class="h-6 w-6" />
           </button>
 
           <!-- Page Title (can be dynamic based on current route if needed) -->
           <div class="flex-1 lg:flex-none">
-            <h1 class="text-2xl font-bold text-gray-900 dark:text-white">
-              Dashboard
-            </h1>
+            <h1 class="text-2xl font-bold text-white">Dashboard</h1>
           </div>
 
           <!-- Header Actions (Theme Toggle, Notifications, etc.) -->
@@ -211,48 +156,35 @@
             <ClientOnly>
               <button
                 @click="toggleTheme"
-                class="p-2 rounded-md text-gray-500 hover:text-gray-600 hover:bg-gray-100 dark:hover:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                class="rounded-md p-2 text-slate-500 transition-colors hover:bg-slate-800 hover:text-white focus:outline-none focus:ring-2 focus:ring-emerald-500"
                 title="Toggle theme"
               >
-                <!-- UIcon is automatically available if @nuxt/ui is configured -->
-                <UIcon
+                <!-- Corrected icon logic for theme toggle based on current colorMode.value -->
+                <Icon
                   :name="
-                    $colorMode.value === 'dark'
-                      ? 'i-heroicons-sun'
-                      : 'i-heroicons-moon'
+                    colorMode.value === 'dark'
+                      ? 'heroicons:sun' // If current mode is dark, show sun icon to switch to light
+                      : 'heroicons:moon' // If current mode is light, show moon icon to switch to dark
                   "
-                  class="w-5 h-5"
+                  class="h-5 w-5"
                 />
               </button>
               <template #fallback>
                 <!-- Placeholder to prevent layout shift during SSR -->
-                <div class="w-9 h-9"></div>
+                <div class="h-9 w-9"></div>
               </template>
             </ClientOnly>
 
             <!-- Notifications Button -->
             <button
-              class="relative p-2 rounded-md text-gray-500 hover:text-gray-600 hover:bg-gray-100 dark:hover:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-emerald-500"
+              class="relative rounded-md p-2 text-slate-500 transition-colors hover:bg-slate-800 hover:text-white focus:outline-none focus:ring-2 focus:ring-emerald-500"
               title="Notifications"
             >
-              <svg
-                class="w-5 h-5"
-                fill="none"
-                stroke="currentColor"
-                viewBox="0 0 24 24"
-              >
-                <path
-                  stroke-linecap="round"
-                  stroke-linejoin="round"
-                  stroke-width="2"
-                  d="M15 17h5l-5-5 5-5h-5m-6 10v-2a6 6 0 10-12 0v2a2 2 0 002 2h8a2 2 0 002-2z"
-                ></path>
-              </svg>
+              <Icon name="heroicons:bell" class="h-5 w-5" />
               <span
-                class="absolute top-0 right-0 block h-2 w-2 rounded-full bg-red-400 ring-2 ring-white"
+                class="absolute right-0 top-0 block h-2 w-2 rounded-full bg-rose-400 ring-2 ring-slate-900"
               ></span>
             </button>
-            <!-- Add other header actions here, e.g., user dropdown -->
           </div>
         </div>
       </header>
@@ -266,24 +198,21 @@
 </template>
 
 <script setup>
-// All functions like ref, onMounted, useColorMode are auto-imported by Nuxt 3.
-// Rely on the auto-imports to prevent Vite errors.
+import { ref, onMounted, onUnmounted } from "vue"; // Ensure all lifecycle hooks are imported
+import { useColorMode } from "@vueuse/core";
+import { useAuth } from "~/composables/useAuth"; // Import your useAuth composable
 
-// Sidebar state for mobile/tablet visibility
 const sidebarOpen = ref(false);
-
-// Theme management using @nuxtjs/color-mode
 const colorMode = useColorMode();
+const { user, logout } = useAuth(); // Destructure user and logout from useAuth composable
 
 const toggleTheme = () => {
   colorMode.preference = colorMode.value === "dark" ? "light" : "dark";
 };
 
-// --- Optional: Logic to close sidebar on larger screens ---
-// This prevents the sidebar from being 'stuck open' if resized from mobile
 const handleResize = () => {
   if (window.innerWidth >= 1024) {
-    // Equivalent to Tailwind's 'lg' breakpoint
+    // Tailwind's 'lg' breakpoint
     sidebarOpen.value = false;
   }
 };
@@ -292,13 +221,25 @@ onMounted(() => {
   window.addEventListener("resize", handleResize);
 });
 
+// FIX: Corrected typo from onUnUnmounted to onUnmounted
 onUnmounted(() => {
   window.removeEventListener("resize", handleResize);
 });
+
+// Helper for initials in sidebar (if user is available)
+const getInitials = (name) => {
+  if (!name) return "";
+  return name
+    .split(" ")
+    .map((word) => word.charAt(0))
+    .join("")
+    .toUpperCase()
+    .substring(0, 2);
+};
 </script>
 
 <style>
-/* Ensure the layout takes the full height of the viewport */
+/* Basic layout styles, ensure these are still relevant */
 html,
 body,
 #__nuxt {

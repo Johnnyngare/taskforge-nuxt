@@ -1,10 +1,10 @@
 <template>
-  <div class="rounded-xl border border-gray-200 bg-white p-6 shadow-sm">
+  <div class="rounded-xl border border-border bg-surface p-6 shadow-md">
     <div class="mb-6 flex items-center justify-between">
-      <h3 class="text-lg font-semibold text-gray-900">Productivity Stats</h3>
+      <h3 class="text-lg font-semibold text-text-light">Productivity Stats</h3>
       <select
         v-model="selectedPeriod"
-        class="rounded-md border border-gray-300 px-2 py-1 text-sm transition-colors focus:border-blue-500 focus:ring-2 focus:ring-blue-500"
+        class="rounded-md border border-slate-700 bg-slate-700 px-2 py-1 text-sm text-text-light transition-colors focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500"
       >
         <option value="week">This Week</option>
         <option value="month">This Month</option>
@@ -15,27 +15,23 @@
     <!-- Main Stats Grid -->
     <div class="mb-6 grid grid-cols-2 gap-4">
       <!-- Completion Rate -->
-      <div
-        class="rounded-lg bg-gradient-to-br from-green-50 to-green-100 p-4 text-center"
-      >
-        <div class="mb-1 text-2xl font-bold text-green-700">
+      <div class="rounded-lg bg-emerald-500/10 p-4 text-center">
+        <div class="mb-1 text-2xl font-bold text-emerald-400">
           {{ completionRate }}%
         </div>
-        <div class="text-sm font-medium text-green-600">Completion Rate</div>
-        <div class="mt-1 text-xs text-green-500">
+        <div class="text-sm font-medium text-emerald-300">Completion Rate</div>
+        <div class="mt-1 text-xs text-emerald-200">
           {{ completedTasks }} of {{ totalRelevantTasks }} tasks
         </div>
       </div>
 
       <!-- Average Daily Tasks -->
-      <div
-        class="rounded-lg bg-gradient-to-br from-blue-50 to-blue-100 p-4 text-center"
-      >
-        <div class="mb-1 text-2xl font-bold text-blue-700">
+      <div class="rounded-lg bg-blue-500/10 p-4 text-center">
+        <div class="mb-1 text-2xl font-bold text-blue-400">
           {{ averageDailyTasks }}
         </div>
-        <div class="text-sm font-medium text-blue-600">Avg Daily Tasks</div>
-        <div class="mt-1 text-xs text-blue-500">
+        <div class="text-sm font-medium text-blue-300">Avg Daily Tasks</div>
+        <div class="mt-1 text-xs text-blue-200">
           {{ totalRelevantTasks }} tasks total
         </div>
       </div>
@@ -45,7 +41,9 @@
     <div class="space-y-4">
       <!-- Tasks by Status -->
       <div v-if="statusBreakdown.length">
-        <h4 class="mb-3 text-sm font-medium text-gray-700">Tasks by Status</h4>
+        <h4 class="mb-3 text-sm font-medium text-text-light">
+          Tasks by Status
+        </h4>
         <div class="space-y-2">
           <div
             v-for="status in statusBreakdown"
@@ -57,13 +55,13 @@
                 class="h-3 w-3 rounded-full"
                 :class="status.colorClass"
               ></div>
-              <span class="text-sm text-gray-600">{{ status.label }}</span>
+              <span class="text-sm text-slate-300">{{ status.label }}</span>
             </div>
             <div class="flex items-center gap-2">
-              <span class="text-sm font-medium text-gray-900">{{
+              <span class="text-sm font-medium text-text-light">{{
                 status.count
               }}</span>
-              <span class="text-xs text-gray-500"
+              <span class="text-xs text-slate-400"
                 >({{ status.percentage }}%)</span
               >
             </div>
@@ -73,7 +71,7 @@
 
       <!-- Weekly Trend -->
       <div v-if="selectedPeriod === 'week'">
-        <h4 class="mb-3 text-sm font-medium text-gray-700">
+        <h4 class="mb-3 text-sm font-medium text-text-light">
           This Week's Progress
         </h4>
         <div class="grid grid-cols-7 gap-1">
@@ -82,13 +80,13 @@
             :key="index"
             class="text-center"
           >
-            <div class="mb-1 text-xs text-gray-500">{{ day.label }}</div>
+            <div class="mb-1 text-xs text-slate-400">{{ day.label }}</div>
             <div
-              class="flex h-8 items-center justify-center rounded bg-gray-200 text-xs font-medium"
+              class="flex h-8 items-center justify-center rounded text-xs font-medium"
               :class="
                 day.completedTasks > 0
-                  ? 'bg-green-200 text-green-700'
-                  : 'text-gray-400'
+                  ? 'bg-emerald-500/20 text-emerald-300'
+                  : 'bg-slate-700 text-slate-400'
               "
               :title="`${day.completedTasks} tasks completed`"
             >
@@ -96,19 +94,19 @@
             </div>
           </div>
         </div>
-        <div class="mt-2 text-center text-xs text-gray-500">
+        <div class="mt-2 text-center text-xs text-slate-400">
           Tasks completed each day
         </div>
       </div>
 
       <!-- Productivity Insights -->
-      <div class="rounded-lg bg-gray-50 p-4">
-        <h4 class="mb-2 text-sm font-medium text-gray-700">💡 Insights</h4>
+      <div class="rounded-lg bg-surface-alt p-4">
+        <h4 class="mb-2 text-sm font-medium text-text-light">💡 Insights</h4>
         <div class="space-y-1">
           <p
             v-for="insight in productivityInsights"
             :key="insight"
-            class="text-xs text-gray-600"
+            class="text-xs text-slate-300"
           >
             {{ insight }}
           </p>
@@ -179,10 +177,10 @@ const averageDailyTasks = computed(() => {
 
 const statusBreakdown = computed(() => {
   const statuses = [
-    { name: "completed", label: "Completed", colorClass: "bg-green-500" },
+    { name: "completed", label: "Completed", colorClass: "bg-emerald-500" },
     { name: "in_progress", label: "In Progress", colorClass: "bg-blue-500" },
-    { name: "pending", label: "Pending", colorClass: "bg-yellow-500" },
-    { name: "cancelled", label: "Cancelled", colorClass: "bg-red-500" },
+    { name: "pending", label: "Pending", colorClass: "bg-amber-500" },
+    { name: "cancelled", label: "Cancelled", colorClass: "bg-rose-500" },
   ];
   return statuses
     .map((status) => {

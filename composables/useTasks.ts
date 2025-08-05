@@ -1,39 +1,75 @@
 // composables/useTasks.ts
-import { ref } from "vue"; // You might need this explicit import if not auto-imported
+import { ref } from "vue";
+import { useFetch } from "#app";
+
+// Define the ITask interface directly here for clarity and type safety.
+// It's best practice to move this to a `types/task.d.ts` file for global access.
+export interface ITask {
+  _id: string;
+  title: string;
+  description?: string;
+  status: "pending" | "in_progress" | "completed" | "cancelled";
+  priority?: "low" | "medium" | "high" | "urgent";
+  dueDate?: string;
+  projectId?: string;
+  createdAt: string;
+  updatedAt: string;
+}
 
 export const useTasks = () => {
-  // useFetch runs immediately and provides reactive refs
+  // useFetch provides reactive data, pending, error, and refresh refs.
   const {
-    data: tasks, // tasks ref holds the data (array of ITask)
-    pending, // pending ref indicates loading status
-    error, // error ref holds any fetch error
-    refresh, // refresh function to re-trigger the fetch
+    data: tasks,
+    pending,
+    error,
+    refresh,
   } = useFetch<ITask[]>("/api/tasks", {
-    // <ITask[]> for type safety
-    default: () => [], // CRUCIAL: ensures tasks.value is always an array
+    // CRUCIAL FIX for hydration errors: Provide a default empty array.
+    // This ensures `tasks.value` is never null on the server or client initially.
+    default: () => [],
   });
 
   // Function to create a new task
   const createTask = async (taskData: Partial<ITask>) => {
-    // Use Partial<ITask> for input data
     try {
-      await $fetch("/api/tasks", { method: "POST", body: taskData });
-      refresh(); // Re-fetch all tasks to update the UI
-    } catch (e) {
-      console.error("Error creating task:", e);
-      // Implement UI feedback for error (e.g., a toast notification)
-      throw e; // Re-throw to allow component to catch if needed
+      const newTask = await $fetch<ITask>("/api/tasks", {
+        method: "POST",
+        body: taskData,
+      });
+
+      // Optimistic UI Update: Add the new task to the local state immediately.
+      if (tasks.value) {
+        tasks.value.push(newTask);
+      }
+      return newTask;
+    } catch (e: any) {
+      const errorMessage =
+        e.data?.message || e.message || "Failed to create task.";
+      console.error("Error creating task:", errorMessage, e);
+      throw new Error(errorMessage); // Re-throw for the component to handle
     }
   };
 
   // Function to update an existing task
   const updateTask = async (id: string, updates: Partial<ITask>) => {
     try {
-      await $fetch(`/api/tasks/${id}`, { method: "PATCH", body: updates });
-      refresh(); // Re-fetch tasks to update the UI
-    } catch (e) {
-      console.error(`Error updating task ${id}:`, e);
-      throw e;
+      const updatedTask = await $fetch<ITask>(`/api/tasks/${id}`, {
+        method: "PATCH",
+        body: updates,
+      });
+
+      // Optimistic UI Update: Find and replace the task in the local state.
+      if (tasks.value) {
+        const index = tasks.value.findIndex((t) => t._id === id);
+        if (index !== -1) {
+          tasks.value[index] = { ...tasks.value[index], ...updatedTask };
+        }
+      }
+    } catch (e: any) {
+      const errorMessage =
+        e.data?.message || e.message || `Failed to update task ${id}.`;
+      console.error(`Error updating task ${id}:`, errorMessage, e);
+      throw new Error(errorMessage);
     }
   };
 
@@ -41,33 +77,26 @@ export const useTasks = () => {
   const deleteTask = async (id: string) => {
     try {
       await $fetch(`/api/tasks/${id}`, { method: "DELETE" });
-      refresh(); // Re-fetch tasks to update the UI
-    } catch (e) {
-      console.error(`Error deleting task ${id}:`, e);
-      throw e;
+
+      // Optimistic UI Update: Remove the task from the local state.
+      if (tasks.value) {
+        tasks.value = tasks.value.filter((t) => t._id !== id);
+      }
+    } catch (e: any) {
+      const errorMessage =
+        e.data?.message || e.message || `Failed to delete task ${id}.`;
+      console.error(`Error deleting task ${id}:`, errorMessage, e);
+      throw new Error(errorMessage);
     }
   };
 
-  // Return all reactive states and action functions
   return {
     tasks,
     pending,
     error,
-    refresh, // Make sure 'refresh' is returned for external re-fetching
+    refresh,
     createTask,
     updateTask,
     deleteTask,
   };
 };
-
-// You'll need an ITask interface. Assuming it's defined like this:
-// This can go into types/task.d.ts or server/models/Task.ts if you share types.
-interface ITask {
-  _id: string; // MongoDB ObjectId
-  title: string;
-  description?: string;
-  status: "pending" | "completed";
-  dueDate?: Date;
-  projectId?: string; // Optional if not all tasks have a project
-  // Add other fields as per your TaskModel
-}

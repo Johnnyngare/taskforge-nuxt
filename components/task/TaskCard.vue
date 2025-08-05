@@ -1,33 +1,32 @@
 <template>
   <div
-    class="group rounded-lg border border-gray-200 bg-white p-4 transition-all duration-200 hover:shadow-md"
+    class="group rounded-xl border border-border bg-surface p-4 shadow-md transition-all duration-200 hover:border-emerald-500"
   >
-    <!-- Task Header -->
-    <div class="mb-3 flex items-start justify-between">
-      <div class="min-w-0 flex-1">
+    <div class="flex items-start justify-between">
+      <div class="flex-1 min-w-0">
         <h3
-          class="truncate font-medium text-gray-900 transition-colors group-hover:text-blue-600"
+          class="truncate font-medium text-text-light transition-colors group-hover:text-emerald-400"
         >
           {{ task.title }}
         </h3>
       </div>
 
-      <!-- Actions Dropdown -->
       <div class="relative ml-3" v-click-outside="closeDropdown">
         <button
-          @click="toggleDropdown"
-          class="rounded-md p-1 text-gray-400 opacity-0 transition-all duration-200 hover:bg-gray-100 hover:text-gray-600 group-hover:opacity-100"
+          @click.stop="toggleDropdown"
+          class="rounded-md p-1 text-slate-400 opacity-0 transition-all duration-200 hover:bg-surface-alt hover:text-white group-hover:opacity-100"
+          title="Task actions"
         >
           <Icon name="heroicons:ellipsis-vertical" class="h-5 w-5" />
         </button>
 
         <div
           v-if="showDropdown"
-          class="absolute right-0 top-8 z-10 w-48 rounded-lg border border-gray-200 bg-white py-1 shadow-lg animate-in fade-in duration-200"
+          class="absolute right-0 top-8 z-10 w-48 rounded-lg border border-border bg-surface py-1 shadow-lg animate-in fade-in duration-200"
         >
           <button
             @click="handleStatusToggle"
-            class="flex w-full items-center gap-2 px-4 py-2 text-left text-sm transition-colors hover:bg-gray-50"
+            class="flex w-full items-center gap-2 px-4 py-2 text-left text-sm text-text-light transition-colors hover:bg-surface-alt"
           >
             <Icon
               :name="
@@ -41,15 +40,15 @@
           </button>
           <button
             @click="handleEdit"
-            class="flex w-full items-center gap-2 px-4 py-2 text-left text-sm transition-colors hover:bg-gray-50"
+            class="flex w-full items-center gap-2 px-4 py-2 text-left text-sm text-text-light transition-colors hover:bg-surface-alt"
           >
             <Icon name="heroicons:pencil" class="h-4 w-4" />
             Edit Task
           </button>
-          <hr class="my-1 border-gray-200" />
+          <hr class="my-1 border-border" />
           <button
             @click="handleDelete"
-            class="flex w-full items-center gap-2 px-4 py-2 text-left text-sm text-red-600 transition-colors hover:bg-red-50"
+            class="flex w-full items-center gap-2 px-4 py-2 text-left text-sm text-rose-400 transition-colors hover:bg-surface-alt"
           >
             <Icon name="heroicons:trash" class="h-4 w-4" />
             Delete Task
@@ -58,7 +57,6 @@
       </div>
     </div>
 
-    <!-- Task Meta Information -->
     <div class="mb-3 flex flex-wrap items-center gap-2">
       <TaskPriorityBadge :priority="task.priority" />
       <span
@@ -73,7 +71,6 @@
       </span>
     </div>
 
-    <!-- Due Date and Created Date -->
     <div class="flex items-center justify-between text-sm">
       <div class="flex items-center gap-4">
         <div
@@ -84,16 +81,16 @@
           <Icon name="heroicons:calendar-days" class="h-4 w-4" />
           <span>{{ formatDueDate(task.dueDate) }}</span>
         </div>
-        <div class="flex items-center gap-1 text-gray-500">
+        <div class="flex items-center gap-1 text-slate-400">
           <Icon name="heroicons:clock" class="h-4 w-4" />
           <span>{{ formatRelativeDate(task.createdAt) }}</span>
         </div>
       </div>
       <button
         @click="handleStatusToggle"
-        class="flex items-center gap-1 rounded-md px-2 py-1 transition-colors hover:bg-gray-100"
+        class="flex items-center gap-1 rounded-md px-2 py-1 transition-colors hover:bg-surface-alt"
         :class="
-          task.status === 'completed' ? 'text-green-600' : 'text-gray-500'
+          task.status === 'completed' ? 'text-emerald-400' : 'text-slate-400'
         "
       >
         <Icon
@@ -126,23 +123,23 @@ const statusInfo = computed(() => {
   const statuses = {
     pending: {
       label: "Pending",
-      classes: "bg-yellow-100 text-yellow-700",
-      dot: "bg-yellow-500",
+      classes: "bg-amber-500/10 text-amber-400",
+      dot: "bg-amber-500",
     },
     in_progress: {
       label: "In Progress",
-      classes: "bg-blue-100 text-blue-700",
+      classes: "bg-blue-500/10 text-blue-400",
       dot: "bg-blue-500",
     },
     completed: {
       label: "Completed",
-      classes: "bg-green-100 text-green-700",
-      dot: "bg-green-500",
+      classes: "bg-emerald-500/10 text-emerald-400",
+      dot: "bg-emerald-500",
     },
     cancelled: {
       label: "Cancelled",
-      classes: "bg-red-100 text-red-700",
-      dot: "bg-red-500",
+      classes: "bg-rose-500/10 text-rose-400",
+      dot: "bg-rose-500",
     },
   };
   return statuses[props.task.status] || statuses.pending;
@@ -154,13 +151,13 @@ const statusLabel = computed(() => statusInfo.value.label);
 
 const dueDateClasses = computed(() => {
   if (!props.task.dueDate || props.task.status === "completed")
-    return "text-gray-500";
+    return "text-slate-400";
   const dueDate = new Date(props.task.dueDate);
   const today = new Date();
   today.setHours(0, 0, 0, 0);
-  if (dueDate < today) return "text-red-600";
-  if (dueDate.toDateString() === today.toDateString()) return "text-orange-600";
-  return "text-gray-500";
+  if (dueDate < today) return "text-rose-400";
+  if (dueDate.toDateString() === today.toDateString()) return "text-amber-400";
+  return "text-slate-400";
 });
 
 const toggleDropdown = () => (showDropdown.value = !showDropdown.value);
@@ -197,6 +194,7 @@ const formatRelativeDate = (dateString) => {
   return `${days}d ago`;
 };
 
+// Simple click-outside directive
 const vClickOutside = {
   mounted(el, binding) {
     el.clickOutsideEvent = (event) => {
