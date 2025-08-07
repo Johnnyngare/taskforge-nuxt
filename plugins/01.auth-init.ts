@@ -1,3 +1,4 @@
+// plugins/01.auth-init.ts
 export default defineNuxtPlugin(async () => {
   const { fetchUser } = useAuth();
   

@@ -1,11 +1,17 @@
-export default defineNuxtRouteMiddleware((to) => {
-  const { isAuthenticated } = useAuth();
+// server/middleware/auth.ts
+import { defineEventHandler, getCookie } from 'h3';
+import { verifyJwt } from '~/server/utils/jwtHelper'; // <-- USE THE HELPER
 
-  // Simple check - no async operations needed since plugin already ran
-  if (!isAuthenticated.value) {
-    const publicRoutes = ['/login', '/register', '/forgot-password', '/'];
-    if (!publicRoutes.includes(to.path)) {
-      return navigateTo('/login', { replace: true });
-    }
+export default defineEventHandler(async (event) => {
+  const token = getCookie(event, 'auth_token');
+
+  if (!token) {
+    return;
+  }
+
+  const decoded = verifyJwt(token);
+
+  if (decoded) {
+    event.context.user = decoded; // Attach user to context if token is valid
   }
 });

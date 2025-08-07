@@ -1,66 +1,40 @@
 // server/api/auth/me.get.ts
-import { defineEventHandler, getCookie, createError } from "h3";
-import jwt from "jsonwebtoken";
-import User from "~/server/db/models/user";
-import { connectDB } from "~/server/db";
+import { defineEventHandler, createError } from "h3";
+import { UserModel } from "~/server/db/models/user";
+// No explicit connectDB needed if using Nitro plugin
 
 export default defineEventHandler(async (event) => {
-  await connectDB();
+  // This logic assumes server/middleware/auth.ts verifies the JWT
+  // and attaches the user's ID and role to the event context.
+  const userId = event.context.user?.id;
+  const userRole = event.context.user?.role; // Also log the role from context
 
-  // Get the JWT token from the cookie
-  const token = getCookie(event, "auth_token");
+  console.log("ME.GET ATTEMPT:");
+  console.log("  UserID from context:", userId);
+  console.log("  UserRole from context:", userRole);
 
-  if (!token) {
-    throw createError({
-      statusCode: 401,
-      message: "No authentication token found.",
-    });
+  if (!userId) {
+    console.log("  ME.GET Failed: User ID not found in context (Unauthorized).");
+    throw createError({ statusCode: 401, message: "Unauthorized" });
   }
 
   try {
-    // Verify the JWT token
-    const config = useRuntimeConfig(event);
-    if (!config.JWT_SECRET) {
-      throw createError({
-        statusCode: 500,
-        message: "Server Error: JWT Secret is not configured.",
-      });
-    }
+    const user = await UserModel.findById(userId).select("-password"); // Exclude password from response
 
-    const decoded = jwt.verify(token, config.JWT_SECRET) as any;
-
-    // Fetch the user from the database
-    const user = await User.findById(decoded.id);
     if (!user) {
-      throw createError({
-        statusCode: 401,
-        message: "User not found.",
-      });
+      console.log(`  ME.GET Failed: User with ID ${userId} not found in DB.`);
+      throw createError({ statusCode: 404, message: "User not found" });
     }
 
-    // Return user data (the toJSON method will exclude sensitive fields)
+    // The .toJSON() transform will handle _id to id, and remove __v
+    console.log("  ME.GET Success: User found and returned.");
     return user.toJSON();
   } catch (error: any) {
-    // Handle JWT errors
-    if (
-      error.name === "JsonWebTokenError" ||
-      error.name === "TokenExpiredError"
-    ) {
-      throw createError({
-        statusCode: 401,
-        message: "Invalid or expired authentication token.",
-      });
-    }
-
-    // Re-throw H3 errors
-    if (error.statusCode) {
-      throw error;
-    }
-
-    console.error("Error in /api/auth/me:", error);
+    console.error("  ME.GET Error during DB lookup:", error);
     throw createError({
-      statusCode: 500,
-      message: "An unexpected error occurred while fetching user data.",
+      statusCode: error.statusCode || 500,
+      statusMessage: error.statusMessage || "Server Error fetching user details",
+      message: error.message,
     });
   }
 });

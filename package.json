@@ -11,9 +11,9 @@
   },
   "dependencies": {
     "@nuxt/ui": "^2.19.0",
+    "@vueuse/nuxt": "^13.6.0",
     "axios": "^1.7.2",
     "bcrypt": "^5.1.1",
-    "jsonwebtoken": "^9.0.2",
     "mongoose": "^8.4.5",
     "nuxt": "^3.12.3",
     "vue": "^3.4.29",
@@ -31,6 +31,7 @@
     "@vueuse/motion": "^2.1.0",
     "cross-env": "^10.0.0",
     "happy-dom": "^18.0.1",
+    "jsonwebtoken": "^9.0.2",
     "typescript": "^5.4.5",
     "vitest": "^3.2.0"
   }

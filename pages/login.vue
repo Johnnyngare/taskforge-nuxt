@@ -60,7 +60,9 @@
           </FormAppButton>
 
           <div class="relative flex justify-center text-xs uppercase">
-            <span class="bg-slate-800 px-2 text-slate-500">or continue with email</span>
+            <span class="bg-slate-800 px-2 text-slate-500"
+              >or continue with email</span
+            >
           </div>
 
           <!-- Login Form -->
@@ -95,9 +97,7 @@
                 :aria-label="showPassword ? 'Hide password' : 'Show password'"
               >
                 <Icon
-                  :name="
-                    showPassword ? 'heroicons:eye-slash' : 'heroicons:eye'
-                  "
+                  :name="showPassword ? 'heroicons:eye-slash' : 'heroicons:eye'"
                   class="w-5 h-5"
                 />
               </button>
@@ -155,38 +155,32 @@
       </div>
     </div>
   </div>
-</template> <!-- THIS is the final closing template tag for the file -->
+</template>
+<!-- THIS is the final closing template tag for the file -->
 
 <script setup lang="ts">
 import { z } from "zod";
-import { reactive, ref, onMounted, onUnmounted, nextTick } from "vue";
+import { reactive, ref } from "vue";
 import { useAuth } from "~/composables/useAuth";
 
-// Meta and SEO
 useSeoMeta({
   title: "Sign In - TaskForge",
   description:
     "Sign in to your TaskForge account to access your productivity dashboard.",
-  robots: "noindex, nofollow",
 });
 
-// Protect guest routes
 definePageMeta({
   middleware: ["guest"],
   layout: "auth",
 });
 
-// Composables
 const { login } = useAuth();
 const toast = useToast();
 
-// Reactive state
 const loading = ref(false);
 const googleLoading = ref(false);
 const showPassword = ref(false);
-const formRef = ref<HTMLFormElement | null>(null);
 
-// Zod validation schema
 const loginSchema = z.object({
   email: z
     .string({ required_error: "Email is required" })
@@ -194,34 +188,34 @@ const loginSchema = z.object({
     .email("Please enter a valid email address"),
   password: z
     .string({ required_error: "Password is required" })
-    .min(1, "Password is required")
-    .min(6, "Password must be at least 6 characters long"),
+    .min(1, "Password is required"),
   rememberMe: z.boolean().optional(),
 });
 
-// Form state - Use reactive() for objects
 const formState = reactive({
   email: "",
   password: "",
   rememberMe: false,
 });
 
-// Handle form submission
 const handleLogin = async () => {
   loading.value = true;
 
-  // Manual Zod validation
   try {
     loginSchema.parse(formState);
   } catch (validationError: any) {
-    const errorDetails = validationError.errors.map(e => e.message).join(', ');
-    toast.add({
-      title: "Validation Failed",
-      description: errorDetails,
-      icon: "i-heroicons-exclamation-circle",
-      color: "orange",
-      timeout: 4000,
-    });
+    // FIX: Check if the error is a ZodError before accessing .errors
+    if (validationError instanceof z.ZodError) {
+      const errorDetails = validationError.errors
+        .map((e: { message: string }) => e.message) // Type the parameter 'e'
+        .join("\n");
+      toast.add({
+        title: "Validation Failed",
+        description: errorDetails,
+        icon: "i-heroicons-exclamation-circle",
+        color: "orange",
+      });
+    }
     loading.value = false;
     return;
   }
@@ -231,41 +225,24 @@ const handleLogin = async () => {
       email: formState.email,
       password: formState.password,
     });
-
     toast.add({
       title: "Welcome back!",
       description: "Successfully signed in.",
       icon: "i-heroicons-check-circle",
       color: "green",
-      timeout: 3000,
     });
-
-    // Navigation is handled by the auth composable on success
   } catch (error: any) {
     const errorMessage =
-      error?.data?.message || error?.message || "An unexpected error occurred during login.";
+      error?.data?.message || error?.message || "An unexpected error occurred.";
     toast.add({
       title: "Sign in failed",
       description: errorMessage,
       icon: "i-heroicons-exclamation-triangle",
       color: "red",
-      timeout: 5000,
     });
   } finally {
     loading.value = false;
   }
-};
-
-// handleFormError is less critical if manual validation is done
-const handleFormError = (event: Event) => {
-  console.warn("Form validation error (UForm):", event);
-  toast.add({
-    title: "Please check your input",
-    description: "Some fields contain invalid information.",
-    icon: "i-heroicons-exclamation-circle",
-    color: "orange",
-    timeout: 4000,
-  });
 };
 
 const handleGoogleLogin = async () => {
@@ -275,24 +252,13 @@ const handleGoogleLogin = async () => {
   } catch (error: any) {
     toast.add({
       title: "Google sign-in unavailable",
-      description: error?.message || "Could not redirect to Google. Please try again later.",
+      description:
+        error?.message || "Could not redirect to Google. Please try again.",
       icon: "i-heroicons-exclamation-triangle",
       color: "red",
-      timeout: 5000,
     });
   } finally {
     googleLoading.value = false;
   }
 };
-
-onMounted(() => {
-  nextTick(() => {
-    const emailInput = document.querySelector('input[type="email"]') as HTMLInputElement | null;
-    emailInput?.focus();
-  });
-});
-
-onUnmounted(() => {
-  // Add cleanup for keyboard shortcuts if implemented
-});
 </script>

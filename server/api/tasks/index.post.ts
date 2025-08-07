@@ -1,7 +1,6 @@
 // server/api/tasks/index.post.ts
 import { z } from "zod";
 import mongoose from "mongoose";
-import { connectDB } from "~/server/db";
 // FIX: Import enums from the shared types file
 // Change these lines:
 import { TaskPriority, TaskStatus, type ITask } from "~/types/task";
@@ -28,7 +27,6 @@ const createTaskSchema = z.object({
 });
 
 export default defineEventHandler(async (event) => {
-  await connectDB();
   const body = await readBody(event);
 
   try {
