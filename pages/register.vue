@@ -557,8 +557,8 @@ const handleRegister = async () => {
       errorMessage = "This email address is already registered. Please use a different email or sign in.";
     } else if (errorMessage.includes("password must be") || errorMessage.includes("Password does not meet criteria")) {
       errorMessage = "Password does not meet criteria.";
-    } else if (errorMessage.includes("Name is required") || errorMessage.includes("Invalid email address")) {
-        errorMessage = "Please check name and email fields.";
+    } else if (errorMessage.includes("name")) { // Check for name error
+        errorMessage = "Please check name field.";
     }
 
 
@@ -702,4 +702,44 @@ onMounted(() => {
 .password-strength-bar {
   transition: all 0.3s ease;
 }
-</style>
+</style>```
+
+### The Problem: `Cannot read properties of undefined (reading 'req')` in `middleware/auth.ts`
+
+The log confirms that `middleware/auth.ts` (your server-side middleware) is still the source of the crash, specifically pointing to `getCookie(event, 'auth_token')`. This error happens when the `event` object's `node.req` property is missing or `undefined` for certain internal requests that Nuxt's Nitro server handles.
+
+**The code for `server/middleware/auth.ts` that handles this should be:**
+
+```typescript
+// server/middleware/auth.ts
+import { defineEventHandler, getCookie } from "h3";
+import { verifyJwt } from "~/server/utils/jwtHelper";
+
+export default defineEventHandler(async (event) => {
+  const url = event.node?.req?.url;
+
+  // FIX: Skip authentication for known internal Nuxt/Vite paths that don't have full HTTP contexts.
+  if (url && (url.startsWith('/__nuxt_icon') || url.startsWith('/__nuxt_error') || url.startsWith('/_nuxt/'))) {
+    return;
+  }
+  
+  // FIX: CRITICAL GUARD for 'Cannot read properties of undefined (reading 'req')'
+  // Ensure event.node.req and event.node.req.headers are defined before proceeding.
+  if (!event || !event.node || !event.node.req || !event.node.req.headers) {
+      // Log for debugging these specific skipped cases
+      console.error("SERVER MIDDLEWARE ERROR: Incomplete event context (missing req/headers). Skipping auth check for URL:", url || 'unknown');
+      return; 
+  }
+
+  const token = getCookie(event, "auth_token");
+
+  if (!token) {
+    return;
+  }
+
+  const decoded = await verifyJwt(token);
+
+  if (decoded) {
+    event.context.user = decoded;
+  }
+});

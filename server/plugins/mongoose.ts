@@ -1,23 +1,23 @@
 // server/plugins/mongoose.ts
-
 import mongoose from 'mongoose';
-import type { RuntimeConfig } from '@nuxt/schema';
 import { useRuntimeConfig } from '#imports';
 
 export default defineNitroPlugin(async (nitroApp) => {
-  const config = useRuntimeConfig() as RuntimeConfig;
-  const mongoUri = config.private.mongodbUri;
+  const config = useRuntimeConfig();
 
-  if (!mongoUri) {
-    console.error('MongoDB URI is not defined. The application cannot start.');
-    // In a real app, you might want to throw an error to stop the server from starting
+  if (!config.private.mongodbUri) {
+    console.error('FATAL ERROR: MONGODB_URI is not defined in runtimeConfig.');
+   
     return;
   }
 
   try {
-    // Set the buffer timeout globally here as well, just in case.
+    // Set a longer buffer timeout globally just in case, but the plugin should prevent it.
     mongoose.set('bufferTimeoutMS', 30000);
-    await mongoose.connect(mongoUri, { dbName: 'taskforge_db' });
+    
+    await mongoose.connect(config.private.mongodbUri, {
+      dbName: 'taskforge_db', // Or extract from URI if you prefer
+    });
     console.log('✅ MongoDB connection established on server startup.');
   } catch (err) {
     console.error('❌ Could not connect to MongoDB on server startup:', err);

@@ -3,9 +3,7 @@ import { Schema, model, Document, Types } from "mongoose";
 // FIX: Only import enums from the shared types file
 // Change this line:
 import { TaskPriority, TaskStatus, type ITask } from "~/types/task";
-// FIX: This interface now stands alone. It describes the shape of the data
-// as it exists in Mongoose, using Mongoose-specific types like Date and ObjectId.
-// It does NOT extend the frontend ITask interface.
+
 export interface IMongooseTask extends Document {
   title: string;
   description?: string;

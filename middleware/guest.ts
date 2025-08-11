@@ -1,8 +1,12 @@
-export default defineNuxtRouteMiddleware(() => {
-  const { isAuthenticated } = useAuth();
+// middleware/guest.ts (Simpler version)
 
-  // Simple check - no async operations needed since plugin already ran
+import { useAuth } from '~/composables/useAuth';
+
+export default defineNuxtRouteMiddleware((to, from) => {
+  const { isAuthenticated } = useAuth();
   if (isAuthenticated.value) {
-    return navigateTo("/dashboard", { replace: true });
+    // If authenticated, prevent access to guest-only pages
+    console.log(`guest.ts: Authenticated user attempting to access guest route ${to.fullPath}. Redirecting to /dashboard.`);
+    return navigateTo('/dashboard');
   }
 });

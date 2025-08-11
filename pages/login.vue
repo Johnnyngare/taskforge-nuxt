@@ -156,12 +156,13 @@
     </div>
   </div>
 </template>
-<!-- THIS is the final closing template tag for the file -->
 
 <script setup lang="ts">
 import { z } from "zod";
 import { reactive, ref } from "vue";
 import { useAuth } from "~/composables/useAuth";
+
+const toast = useToast();
 
 useSeoMeta({
   title: "Sign In - TaskForge",
@@ -170,12 +171,12 @@ useSeoMeta({
 });
 
 definePageMeta({
-  middleware: ["guest"],
+  middleware: ["guest"], // FIX: Use 'guest' middleware here
   layout: "auth",
 });
 
 const { login } = useAuth();
-const toast = useToast();
+
 
 const loading = ref(false);
 const googleLoading = ref(false);
@@ -200,14 +201,14 @@ const formState = reactive({
 
 const handleLogin = async () => {
   loading.value = true;
+  console.log("FRONTEND: handleLogin started.");
 
   try {
     loginSchema.parse(formState);
   } catch (validationError: any) {
-    // FIX: Check if the error is a ZodError before accessing .errors
     if (validationError instanceof z.ZodError) {
       const errorDetails = validationError.errors
-        .map((e: { message: string }) => e.message) // Type the parameter 'e'
+        .map((e: { message: string }) => e.message)
         .join("\n");
       toast.add({
         title: "Validation Failed",
@@ -217,14 +218,20 @@ const handleLogin = async () => {
       });
     }
     loading.value = false;
+    console.log("FRONTEND: Form validation failed.");
     return;
   }
 
   try {
+    console.log("FRONTEND: Calling useAuth().login...");
+    
     await login({
       email: formState.email,
       password: formState.password,
     });
+    console.log("FRONTEND: Login successful, toast added.");
+
+    // Navigation to /dashboard happens inside useAuth().login, so no redirect here.
     toast.add({
       title: "Welcome back!",
       description: "Successfully signed in.",
@@ -233,20 +240,24 @@ const handleLogin = async () => {
     });
   } catch (error: any) {
     const errorMessage =
-      error?.data?.message || error?.message || "An unexpected error occurred.";
+      error?.data?.message || error?.message || "An unexpected error occurred during login API call.";
     toast.add({
       title: "Sign in failed",
       description: errorMessage,
       icon: "i-heroicons-exclamation-triangle",
       color: "red",
     });
+    console.error("FRONTEND: Error caught during login API call:", error);
   } finally {
     loading.value = false;
+    console.log("FRONTEND: handleLogin finished.");
   }
 };
 
+
 const handleGoogleLogin = async () => {
   googleLoading.value = true;
+  console.log("FRONTEND: handleGoogleLogin started.");
   try {
     await navigateTo("/api/auth/google", { external: true });
   } catch (error: any) {
@@ -257,8 +268,10 @@ const handleGoogleLogin = async () => {
       icon: "i-heroicons-exclamation-triangle",
       color: "red",
     });
+    console.error("FRONTEND: Google login failed:", error);
   } finally {
     googleLoading.value = false;
+    console.log("FRONTEND: handleGoogleLogin finished.");
   }
 };
 </script>

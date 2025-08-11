@@ -1,4 +1,4 @@
-// nuxt.config.ts (Cleaned)
+// nuxt.config.ts (Cleaned and simplified)
 import { defineNuxtConfig } from "nuxt/config";
 
 export default defineNuxtConfig({
@@ -48,14 +48,14 @@ export default defineNuxtConfig({
   app: {
     head: {
       htmlAttrs: { lang: "en" },
-      title: "TaskForge - Transform Your Productivity",
+      title: "TaskForge - Master Your Day, Forge Your Future",
       meta: [
         { charset: "utf-8" },
         { name: "viewport", content: "width=device-width, initial-scale=1" },
         {
           name: "description",
           content:
-            "Revolutionary task management platform that helps you organize, prioritize, and accomplish your goals with ease.",
+            "The ultimate productivity platform designed to help you organize, prioritize, and conquer your tasks with ease.",
         },
         { name: "format-detection", content: "telephone=no" },
       ],
@@ -70,5 +70,6 @@ export default defineNuxtConfig({
   },
 
   plugins: [],
-  middleware: ["auth", "guest", "admin"],
+  middleware: ["02.auth", "guest", "admin"],
+  // REMOVED: vite.resolve.alias, build.rollupOptions.external, etc.
 });

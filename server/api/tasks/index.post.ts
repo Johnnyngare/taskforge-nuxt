@@ -1,8 +1,7 @@
 // server/api/tasks/index.post.ts
 import { z } from "zod";
 import mongoose from "mongoose";
-// FIX: Import enums from the shared types file
-// Change these lines:
+
 import { TaskPriority, TaskStatus, type ITask } from "~/types/task";
 import { TaskModel, type IMongooseTask } from "~/server/db/models/task";
 
