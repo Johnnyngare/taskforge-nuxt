@@ -1,50 +1,59 @@
 // server/api/projects/index.get.ts
-import { defineEventHandler, getQuery } from "h3";
-// FIX: Remove .ts extensions from imports
+import { defineEventHandler, getQuery, createError } from "h3";
 import { ProjectModel } from "~/server/db/models/project";
 import { TaskModel } from "~/server/db/models/task";
+import mongoose from "mongoose";
 
 export default defineEventHandler(async (event) => {
+  const query = getQuery(event);
+  const ctxUser = event.context?.user;
 
-  // Define a type for the project object after adding completionRate
-  type ProjectWithCompletion = Awaited<
-    ReturnType<typeof ProjectModel.find>
-  >[number] & {
-    completionRate?: number;
-  };
+  // 1. Auth check
+  if (!ctxUser?.id) {
+    console.warn("projects.get: Unauthorized attempt to fetch projects. No user context.");
+    throw createError({
+      statusCode: 401,
+      statusMessage: "Unauthorized: User not authenticated.",
+    });
+  }
+
+  const role = ctxUser.role;
+  const userId = new mongoose.Types.ObjectId(ctxUser.id);
+
+  // 2. RBAC filter
+  let filter: Record<string, any> = {};
+  if (role !== "admin") {
+    // Non-admins: see projects they own or are members of
+    filter.$or = [{ owner: userId }, { members: userId }];
+  }
 
   try {
-    // Use .lean() for performance as we are modifying the objects
-    const projects = await ProjectModel.find({}).lean();
+    // 3. Fetch projects
+    const projects = await ProjectModel.find(filter).lean();
 
-    // Use Promise.all for more efficient parallel database queries
+    // 4. Append completion rate to each project
     const projectsWithCompletion = await Promise.all(
       projects.map(async (project) => {
-        const totalTasks = await TaskModel.countDocuments({
-          projectId: project._id,
-        });
-        const completedTasks = await TaskModel.countDocuments({
-          projectId: project._id,
-          status: "completed",
-        });
+        const [totalTasks, completedTasks] = await Promise.all([
+          TaskModel.countDocuments({ projectId: project._id }),
+          TaskModel.countDocuments({ projectId: project._id, status: "completed" }),
+        ]);
 
-        const completionRate =
-          totalTasks > 0 ? (completedTasks / totalTasks) * 100 : 0;
+        const completionRate = totalTasks > 0 ? (completedTasks / totalTasks) * 100 : 0;
 
-        // Return a new object with the added property
         return {
           ...project,
-          completionRate: Math.round(completionRate), // Round to nearest integer
+          completionRate: Math.round(completionRate),
         };
       })
     );
 
     return projectsWithCompletion;
-  } catch (error: any) {
-    console.error("Error fetching projects:", error);
+  } catch (error) {
+    console.error("projects.get: Database error", error);
     throw createError({
       statusCode: 500,
-      statusMessage: "Failed to fetch projects.",
+      statusMessage: "Failed to fetch projects due to database error.",
     });
   }
 });

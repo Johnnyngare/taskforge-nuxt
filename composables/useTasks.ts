@@ -1,73 +1,91 @@
 // composables/useTasks.ts
-import { useFetch, useNuxtApp } from "#app";
-import type { ITask } from "~/types/task";
+import { readonly, watch, computed } from 'vue'
+import { useFetch } from '#imports'
+import type { ITask } from '~/types/task'
+import { useAuth } from '~/composables/useAuth'
 
 export const useTasks = () => {
-  const nuxtApp = useNuxtApp();
-
+  const { user } = useAuth() 
+  // const toast = useToast(); // This relies on Nuxt auto-import. Keep this line if used elsewhere.
+  
   const {
     data: tasks,
     pending,
     error,
-    refresh,
-  } = useFetch<ITask[]>("/api/tasks", {
-    default: () => [],
-  });
+    refresh
+  } = useFetch<ITask[]>('/api/tasks', { 
+    method: 'GET',
+    baseURL: '/',
+    immediate: true, 
+    key: `tasks-for-${user.value?.id || 'guest'}`, 
+    
+    query: {
+      userId: computed(() => user.value?.id) 
+    },
+    
+    server: true, 
+    client: true, 
 
-  const createTask = async (taskData: Partial<Omit<ITask, "id">>) => {
-    try {
-      const newTask = await $fetch<ITask>("/api/tasks", {
-        method: "POST",
-        body: taskData,
-      });
-      if (tasks.value) {
-        tasks.value.push(newTask);
-      }
-      return newTask;
-    } catch (e: any) {
-      throw e;
+    default: () => [] as ITask[], 
+    
+    onResponseError({ request, response }) { 
+      const requestUrl = (request as any)?.url || String(request) || 'unknown URL';
+      console.error(`useTasks: API Error for ${requestUrl}:`, response?.status, response?.statusText, response?._data);
+      
+    },
+  })
+
+  // The explicit watch for user is no longer needed.
+
+  const createTask = async (taskData: Partial<ITask>) => { 
+    const newTask = await $fetch<ITask>('/api/tasks', {
+      method: 'POST',
+      body: { ...taskData, userId: user.value?.id }, 
+      credentials: 'include'
+    })
+    // Optimistic update: Create a NEW array and assign it.
+    if (Array.isArray(tasks.value)) { 
+      tasks.value = [newTask, ...(tasks.value)]; 
+    } else {
+      tasks.value = [newTask]; 
     }
-  };
+    return newTask
+  }
 
   const updateTask = async (id: string, updates: Partial<ITask>) => {
-    try {
-      const updatedTask = await $fetch<ITask>(`/api/tasks/${id}`, {
-        method: "PATCH",
-        body: updates,
-      });
-
-      if (tasks.value) {
-        // FIX: Find by 'id' instead of '_id'
-        const index = tasks.value.findIndex((t) => t.id === id);
-        if (index !== -1) {
-          tasks.value[index] = updatedTask;
-        }
+    const updatedTask = await $fetch<ITask>(`/api/tasks/${id}`, {
+      method: 'PATCH',
+      body: updates,
+      credentials: 'include'
+    })
+    // Optimistic update: Create a NEW array and assign it.
+    if (Array.isArray(tasks.value)) {
+      const idx = tasks.value.findIndex((t: ITask) => t.id === id) 
+      if (idx !== -1) {
+        tasks.value[idx] = updatedTask
       }
-      return updatedTask;
-    } catch (e: any) {
-      throw e;
     }
-  };
+    return updatedTask
+  }
 
   const deleteTask = async (id: string) => {
-    try {
-      await $fetch(`/api/tasks/${id}`, { method: "DELETE" });
-      if (tasks.value) {
-        // FIX: Filter by 'id' instead of '_id'
-        tasks.value = tasks.value.filter((t) => t.id !== id);
-      }
-    } catch (e: any) {
-      throw e;
+    await $fetch(`/api/tasks/${id}`, {
+      method: 'DELETE',
+      credentials: 'include'
+    })
+    // Optimistic update: Create a NEW array and assign it.
+    if (Array.isArray(tasks.value)) {
+      tasks.value = tasks.value.filter((t: ITask) => t.id !== id);
     }
-  };
+  }
 
   return {
-    tasks,
+    tasks: readonly(tasks), 
     pending,
     error,
     refresh,
     createTask,
     updateTask,
-    deleteTask,
-  };
-};
+    deleteTask
+  }
+}

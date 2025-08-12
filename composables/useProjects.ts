@@ -1,34 +1,44 @@
 // composables/useProjects.ts
-import { useFetch } from "#app";
-// It's good practice to define a shared IProject type
-// For now, we'll use a generic Record<string, any>
-// You should create a types/project.ts file similar to types/task.ts
+import { readonly, computed, watch } from 'vue'
+import { useFetch } from '#imports'
+import type { IProject } from '~/types/project'
+import { useAuth } from '~/composables/useAuth'
 
-// Define a simple project type for the frontend
-export interface IProject {
-  id: string;
-  name: string;
-  description?: string;
-  budget?: number;
-  totalCost?: number;
-  startDate?: string;
-  endDate?: string;
-  owner: string;
-  completionRate?: number;
-}
 
 export const useProjects = () => {
-  // useFetch with a key will share the state across all components that use this composable.
-  // It will only fetch the data once on the initial call.
+  const { user, initialized } = useAuth() 
+
   const {
     data: projects,
     pending,
     error,
-    refresh,
-  } = useFetch<IProject[]>("/api/projects", {
-    key: "projects-list", // A unique key to identify this shared fetch
-    default: () => [],
-  });
+    refresh
+  } = useFetch<IProject[]>('/api/projects', { 
+    method: 'GET',
+    baseURL: '/',
+    immediate: true, 
+    key: computed(() => `projects-for-${user.value?.id || 'guest'}`), 
+    
+    query: computed(() => ({
+      userId: user.value?.id || '' 
+    })),
+    
+    server: true, 
+    client: true, 
 
-  return { projects, pending, error, refresh };
-};
+    default: () => [] as IProject[], 
+    
+    onResponseError({ request, response }) { 
+      const requestUrl = (request as any)?.url || String(request) || 'unknown URL';
+      console.error(`useProjects: API Error for ${requestUrl}:`, response?.status, response?.statusText, response?._data);
+    },
+  })
+
+
+  return {
+    projects: readonly(projects),
+    pending,
+    error,
+    refresh
+  }
+}

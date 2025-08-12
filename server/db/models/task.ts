@@ -1,19 +1,18 @@
 // server/db/models/task.ts
 import { Schema, model, Document, Types } from "mongoose";
-// FIX: Only import enums from the shared types file
-// Change this line:
-import { TaskPriority, TaskStatus, type ITask } from "~/types/task";
+import { TaskPriority, TaskStatus } from "~/types/task"; // Removed unused ITask import
 
 export interface IMongooseTask extends Document {
   title: string;
   description?: string;
-  status: TaskStatus; // Uses shared enum
-  priority: TaskPriority; // Uses shared enum
-  dueDate?: Date; // Mongoose type
-  projectId?: Types.ObjectId; // Mongoose type
-  createdAt: Date; // Mongoose type
-  updatedAt: Date; // Mongoose type
-  _id: Types.ObjectId; // Mongoose type
+  status: TaskStatus;
+  priority: TaskPriority;
+  dueDate?: Date;
+  projectId?: Types.ObjectId;
+  userId: Types.ObjectId; // ✅ Added creator/assignee reference
+  createdAt: Date;
+  updatedAt: Date;
+  _id: Types.ObjectId;
 }
 
 const taskSchema = new Schema<IMongooseTask>(
@@ -43,12 +42,15 @@ const taskSchema = new Schema<IMongooseTask>(
     },
     dueDate: {
       type: Date,
-      required: false,
     },
     projectId: {
       type: Schema.Types.ObjectId,
       ref: "Project",
-      required: false,
+    },
+    userId: {
+      type: Schema.Types.ObjectId,
+      ref: "User",
+      required: true, // ✅ Ensure every task has a creator/assignee
     },
   },
   {
@@ -56,10 +58,14 @@ const taskSchema = new Schema<IMongooseTask>(
     toJSON: {
       virtuals: true,
       transform: function (doc, ret: Record<string, any>) {
+        ret.id = ret._id.toString(); // ✅ Add a clean `id` field
         delete ret._id;
         delete ret.__v;
         if (ret.projectId && ret.projectId instanceof Types.ObjectId) {
           ret.projectId = ret.projectId.toString();
+        }
+        if (ret.userId && ret.userId instanceof Types.ObjectId) {
+          ret.userId = ret.userId.toString();
         }
         return ret;
       },
@@ -68,9 +74,11 @@ const taskSchema = new Schema<IMongooseTask>(
   }
 );
 
+// Indexes for performance
 taskSchema.index({ status: 1 });
 taskSchema.index({ priority: 1 });
 taskSchema.index({ dueDate: 1 });
 taskSchema.index({ createdAt: -1 });
+taskSchema.index({ userId: 1 }); // ✅ Filter tasks by user quickly
 
 export const TaskModel = model<IMongooseTask>("Task", taskSchema);

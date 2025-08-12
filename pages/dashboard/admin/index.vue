@@ -18,15 +18,15 @@
 </template>
 
 <script setup lang="ts">
-// FIX: Apply middleware to protect this page.
-// The 'auth' middleware runs first to ensure the user is logged in.
-// The 'admin' middleware then runs to check if the logged-in user has the admin role.
+// IMPORTANT: Make sure the middleware file name matches this string.
+// If your file is `server/middleware/02.auth.ts` then keep "02.auth".
+// If you rename it to `auth.ts`, then use "auth".
 definePageMeta({
-  layout: "dashboard",
-  middleware: ["auth", "admin"],
-});
+  layout: 'dashboard',
+  middleware: ['02-auth', 'admin']
+})
 
 useSeoMeta({
-  title: "Admin Panel - TaskForge",
-});
+  title: 'Admin Panel - TaskForge'
+})
 </script>

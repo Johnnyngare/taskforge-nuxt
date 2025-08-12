@@ -14,10 +14,8 @@ export enum TaskPriority {
   Urgent = "Urgent",
 }
 
-// This is the single, definitive interface for the frontend.
-// It uses strings for IDs and dates, as received from the API's JSON response.
 export interface ITask {
-  id: string; // Use 'id' as per our last fix
+  id: string; // Use 'id' as per our last fix (transformed from _id)
   title: string;
   description?: string;
   status: TaskStatus;
@@ -26,4 +24,6 @@ export interface ITask {
   projectId?: string;
   createdAt: string; // ISO date string
   updatedAt: string; // ISO date string
+  userId: string; // FIX: Add userId to ITask interface, as tasks are owned by users
+  assignedTo?: string; // If tasks can be assigned to other users (optional)
 }

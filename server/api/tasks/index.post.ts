@@ -1,8 +1,9 @@
 // server/api/tasks/index.post.ts
+import { defineEventHandler, readBody, setResponseStatus, createError } from "h3";
 import { z } from "zod";
 import mongoose from "mongoose";
 
-import { TaskPriority, TaskStatus, type ITask } from "~/types/task";
+import { TaskPriority, TaskStatus } from "~/types/task";
 import { TaskModel, type IMongooseTask } from "~/server/db/models/task";
 
 const getEnumValues = <T extends Record<string, string>>(
@@ -26,13 +27,21 @@ const createTaskSchema = z.object({
 });
 
 export default defineEventHandler(async (event) => {
+  // ✅ Ensure user is authenticated
+  const ctxUser = event.context?.user;
+  if (!ctxUser?.id) {
+    throw createError({
+      statusCode: 401,
+      statusMessage: "Unauthorized: User not authenticated.",
+    });
+  }
+
   const body = await readBody(event);
 
   try {
     const validatedData = createTaskSchema.parse(body);
 
-    // FIX: Type this object with the Mongoose interface, not the frontend one.
-    // This resolves the type errors for `dueDate` and `projectId`.
+    // ✅ Build the Mongoose task object
     const taskToCreate: Partial<IMongooseTask> = {
       title: validatedData.title,
       description: validatedData.description || undefined,
@@ -44,24 +53,23 @@ export default defineEventHandler(async (event) => {
       projectId: validatedData.projectId
         ? new mongoose.Types.ObjectId(validatedData.projectId)
         : undefined,
+      userId: new mongoose.Types.ObjectId(ctxUser.id), // ✅ Link task to creator
     };
 
     const task = await TaskModel.create(taskToCreate);
 
     setResponseStatus(event, 201);
-    // The .toJSON() transform correctly converts the Mongoose object
-    // into the frontend-compatible ITask shape.
-    return task.toJSON();
+    return task.toJSON(); // Mongoose toJSON will format for frontend
   } catch (error: any) {
     if (error instanceof z.ZodError) {
-      console.error("Zod Validation Failed:", error.flatten().fieldErrors);
+      console.error("tasks.post: Validation failed", error.flatten().fieldErrors);
       throw createError({
         statusCode: 400,
         statusMessage: "Validation failed",
         data: error.flatten().fieldErrors,
       });
     }
-    console.error("Error creating task:", error);
+    console.error("tasks.post: Error creating task", error);
     throw createError({
       statusCode: 500,
       statusMessage: "Internal Server Error",

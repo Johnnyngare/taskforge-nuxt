@@ -1,3 +1,4 @@
+<!-- pages/dashboard/projects.vue -->
 <template>
   <div>
     <!-- Page Header -->
@@ -104,7 +105,7 @@
 <script setup>
 import { ref } from "vue";
 
-definePageMeta({ layout: "dashboard", middleware: "auth" });
+definePageMeta({ layout: "dashboard", middleware: "02.auth" }); // ✅ fixed name to match file
 useSeoMeta({
   title: "Projects - TaskForge",
   description: "Manage your projects and organize your work.",
@@ -157,7 +158,7 @@ const getProgressBarClass = (rate) => {
 };
 
 const formatRelativeDate = (dateString) => {
-  const diff = new Date() - new Date(dateString);
+  const diff = Date.now() - new Date(dateString).getTime();
   const hours = Math.floor(diff / 3600000);
   if (hours < 24) return `${hours}h ago`;
   return `${Math.floor(hours / 24)}d ago`;
