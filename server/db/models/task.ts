@@ -1,84 +1,60 @@
 // server/db/models/task.ts
-import { Schema, model, Document, Types } from "mongoose";
-import { TaskPriority, TaskStatus } from "~/types/task"; // Removed unused ITask import
+import { Schema, model, Document } from 'mongoose';
+import { TaskStatus, TaskPriority, type ITask } from '~/types/task'; // Import ITask and enums
 
-export interface IMongooseTask extends Document {
-  title: string;
-  description?: string;
-  status: TaskStatus;
-  priority: TaskPriority;
-  dueDate?: Date;
-  projectId?: Types.ObjectId;
-  userId: Types.ObjectId; // ✅ Added creator/assignee reference
-  createdAt: Date;
-  updatedAt: Date;
-  _id: Types.ObjectId;
+export interface ITaskModel extends Document, Omit<ITask, 'id'> { // Omit 'id' here as it's a virtual
+  userId: mongoose.Types.ObjectId; // Owner of the task
+  assignedTo?: mongoose.Types.ObjectId; // User task is assigned to
+  // Assuming projectId is also ObjectId
+  projectId?: mongoose.Types.ObjectId;
 }
 
-const taskSchema = new Schema<IMongooseTask>(
+const taskSchema = new Schema<ITaskModel>(
   {
-    title: {
-      type: String,
-      required: [true, "Task title is required"],
-      trim: true,
-      maxlength: [200, "Task title cannot exceed 200 characters"],
-    },
-    description: {
-      type: String,
-      trim: true,
-      maxlength: [1000, "Task description cannot exceed 1000 characters"],
-    },
-    status: {
-      type: String,
-      enum: Object.values(TaskStatus),
-      default: TaskStatus.Pending,
-      required: true,
-    },
-    priority: {
-      type: String,
-      enum: Object.values(TaskPriority),
-      default: TaskPriority.Medium,
-      required: true,
-    },
-    dueDate: {
-      type: Date,
-    },
-    projectId: {
-      type: Schema.Types.ObjectId,
-      ref: "Project",
-    },
-    userId: {
-      type: Schema.Types.ObjectId,
-      ref: "User",
-      required: true, // ✅ Ensure every task has a creator/assignee
-    },
+    title: { type: String, required: true, trim: true },
+    description: { type: String, trim: true },
+    status: { type: String, enum: Object.values(TaskStatus), default: TaskStatus.Pending, required: true },
+    priority: { type: String, enum: Object.values(TaskPriority), default: TaskPriority.Medium, required: true },
+    dueDate: { type: Date },
+    // Link task to its creator/owner
+    userId: { type: Schema.Types.ObjectId, ref: 'User', required: true, index: true },
+    // Optional: link task to an assignee if different from owner
+    assignedTo: { type: Schema.Types.ObjectId, ref: 'User', index: true },
+    // Optional: link task to a project
+    projectId: { type: Schema.Types.ObjectId, ref: 'Project', index: true },
   },
   {
-    timestamps: true,
+    timestamps: true, // Adds createdAt and updatedAt
     toJSON: {
-      virtuals: true,
-      transform: function (doc, ret: Record<string, any>) {
-        ret.id = ret._id.toString(); // ✅ Add a clean `id` field
-        delete ret._id;
-        delete ret.__v;
-        if (ret.projectId && ret.projectId instanceof Types.ObjectId) {
-          ret.projectId = ret.projectId.toString();
+      virtuals: true, // Ensure virtuals are included
+      transform: (doc, ret: Record<string, any>): ITask => {
+        // Transform _id to id (string)
+        ret.id = ret._id ? String(ret._id) : ret.id;
+        delete ret._id; // Remove _id
+
+        // Ensure projectId and userId are also strings if they are ObjectIds
+        if (ret.projectId && typeof ret.projectId === 'object') {
+          ret.projectId = String(ret.projectId);
         }
-        if (ret.userId && ret.userId instanceof Types.ObjectId) {
-          ret.userId = ret.userId.toString();
+        if (ret.userId && typeof ret.userId === 'object') {
+          ret.userId = String(ret.userId);
         }
-        return ret;
+        if (ret.assignedTo && typeof ret.assignedTo === 'object') {
+          ret.assignedTo = String(ret.assignedTo);
+        }
+
+        delete ret.__v; // Remove Mongoose version key
+        return ret as ITask; // Cast to ITask for type safety
       },
     },
-    id: true,
+    id: true, // Tells Mongoose to create an 'id' virtual getter by default
   }
 );
 
-// Indexes for performance
+// Add indexes for common queries
+taskSchema.index({ userId: 1 });
+taskSchema.index({ projectId: 1 });
 taskSchema.index({ status: 1 });
-taskSchema.index({ priority: 1 });
-taskSchema.index({ dueDate: 1 });
-taskSchema.index({ createdAt: -1 });
-taskSchema.index({ userId: 1 }); // ✅ Filter tasks by user quickly
+taskSchema.index({ assignedTo: 1 });
 
-export const TaskModel = model<IMongooseTask>("Task", taskSchema);
+export const TaskModel = model<ITaskModel>('Task', taskSchema);

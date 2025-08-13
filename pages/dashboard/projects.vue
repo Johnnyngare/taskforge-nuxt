@@ -105,7 +105,7 @@
 <script setup>
 import { ref } from "vue";
 
-definePageMeta({ layout: "dashboard", middleware: "02.auth" }); // ✅ fixed name to match file
+definePageMeta({ layout: "dashboard", middleware: "02-auth" }); // ✅ fixed name to match file
 useSeoMeta({
   title: "Projects - TaskForge",
   description: "Manage your projects and organize your work.",

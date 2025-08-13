@@ -29,7 +29,7 @@
 import type { ITask } from "~/types/task";
 
 const props = defineProps<{
-  tasks: ITask[];
+  tasks: ITask[]; // Array of ITask
 }>();
 
 const emit = defineEmits<{

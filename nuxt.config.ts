@@ -70,6 +70,6 @@ export default defineNuxtConfig({
   },
 
   plugins: [],
-  middleware: ["02.auth", "guest", "admin"],
+  middleware: ["02-auth", "guest", "admin"],
   // REMOVED: vite.resolve.alias, build.rollupOptions.external, etc.
 });

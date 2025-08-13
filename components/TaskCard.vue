@@ -172,13 +172,13 @@ const dueDateClasses = computed(() => {
 const toggleDropdown = () => (showDropdown.value = !showDropdown.value);
 
 const handleEdit = () => {
-  // FIX: Emit 'id' instead of '_id'
+  console.log("TaskCard: Emitting 'edit' for task ID:", props.task.id); // Add log
   emit("edit", props.task.id);
   showDropdown.value = false;
 };
 
 const handleDelete = () => {
-  // FIX: Emit 'id' instead of '_id'
+  console.log("TaskCard: Emitting 'delete' for task ID:", props.task.id); // Add log
   emit("delete", props.task.id);
   showDropdown.value = false;
 };
@@ -188,7 +188,7 @@ const handleStatusToggle = () => {
     props.task.status === TaskStatus.Completed
       ? TaskStatus.Pending
       : TaskStatus.Completed;
-  // FIX: Emit 'id' instead of '_id'
+  console.log("TaskCard: Emitting 'status-changed' for task ID:", props.task.id, "new status:", newStatus); // Add log
   emit("status-changed", props.task.id, { status: newStatus });
   showDropdown.value = false;
 };

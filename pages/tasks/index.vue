@@ -57,13 +57,13 @@
 </template>
 
 <script setup lang="ts">
-import { ref, type Ref } from "vue";
+import { ref, type Ref, onMounted } from "vue";
 import { useTasks } from "~/composables/useTasks";
 import { type ITask } from "~/types/task";
 
 definePageMeta({
   layout: "dashboard",
-  middleware: "02.auth", // Ensure matches actual middleware file name
+  middleware: "02-auth", // FIX: Changed from "auth" to "02-auth"
 });
 
 useSeoMeta({
@@ -74,8 +74,13 @@ useSeoMeta({
 const { tasks, pending, error, refresh, updateTask, deleteTask } = useTasks();
 const toast = useToast();
 
-const showQuickAdd = ref(false);
+const showQuickAdd: Ref<boolean> = ref(false);
 const editingTask: Ref<ITask | null> = ref(null);
+
+onMounted(() => {
+  console.log("All Tasks page mounted. Calling useTasks.refresh().");
+  refresh();
+});
 
 const handleTaskCreated = () => {
   showQuickAdd.value = false;
@@ -96,10 +101,10 @@ const handleTaskUpdate = async (taskId: string, updates: Partial<ITask>) => {
       icon: "i-heroicons-check-circle",
       color: "green",
     });
-  } catch (err: any) {
+  } catch (err: unknown) {
     toast.add({
       title: "Error updating task",
-      description: err.data?.message || "An unexpected error occurred.",
+      description: (err as any).data?.message || "An unexpected error occurred.",
       icon: "i-heroicons-exclamation-triangle",
       color: "red",
     });
@@ -116,10 +121,10 @@ const handleTaskDelete = async (taskId: string) => {
       icon: "i-heroicons-trash",
       color: "orange",
     });
-  } catch (err: any) {
+  } catch (err: unknown) {
     toast.add({
       title: "Error deleting task",
-      description: err.data?.message || "An unexpected error occurred.",
+      description: (err as any).data?.message || "An unexpected error occurred.",
       icon: "i-heroicons-exclamation-triangle",
       color: "red",
     });
@@ -127,7 +132,7 @@ const handleTaskDelete = async (taskId: string) => {
 };
 
 const handleEditTask = (taskId: string) => {
-  const foundTask = tasks.value?.find((t) => t._id === taskId); // Ensure correct ID field
+  const foundTask = Array.isArray(tasks.value) ? tasks.value.find((t: ITask) => t.id === taskId) : undefined;
   if (foundTask) {
     editingTask.value = foundTask;
   }
@@ -143,13 +148,18 @@ const handleSaveEdit = async (taskId: string, updatedData: Partial<ITask>) => {
       icon: "i-heroicons-check-circle",
       color: "green",
     });
-  } catch (err: any) {
+  } catch (err: unknown) {
     toast.add({
       title: "Error saving task",
-      description: err.data?.message || "An unexpected error occurred.",
+      description: (err as any).data?.message || "An unexpected error occurred.",
       icon: "i-heroicons-exclamation-triangle",
       color: "red",
     });
   }
 };
+
+const formatDate = (dateString?: string) =>
+  dateString
+    ? new Date(dateString).toLocaleDateString("en-US", { month: "short", day: "numeric" })
+    : "";
 </script>

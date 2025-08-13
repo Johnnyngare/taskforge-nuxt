@@ -37,7 +37,7 @@
     />
 
     <!-- Main Grid -->
-    <div class="grid grid-cols-1 gap-6 lg:grid-cols-3">
+    <div class="grid grid-cols-1 gap-6 lg:col-span-3 lg:grid-cols-3">
       <!-- Recent Tasks -->
       <div class="lg:col-span-2">
         <div class="rounded-xl border border-slate-700 bg-slate-800 p-6 shadow-md">
@@ -62,9 +62,10 @@
             </FormAppButton>
           </div>
 
+          <!-- FIX: Ensure tasks.value is an array before slicing -->
           <TaskList
             v-else
-            :tasks="tasks ? tasks.slice(0, 6) : []"
+            :tasks="Array.isArray(tasks) ? tasks.slice(0, 6) : []"
             @task-updated="handleTaskUpdate"
             @task-deleted="handleTaskDelete"
             @edit-task="handleEditTask"
@@ -83,6 +84,7 @@
             <div class="flex justify-between">
               <span class="text-slate-400">Completed</span>
               <span class="font-semibold text-emerald-400">
+                <!-- FIX: Safely access filter and length -->
                 {{ completedTasksCount }}/{{ tasks?.length || 0 }}
               </span>
             </div>
@@ -104,6 +106,7 @@
             No upcoming deadlines
           </div>
           <div v-else class="space-y-2">
+            <!-- FIX: Ensure upcomingTasks is an array before slicing -->
             <div
               v-for="task in upcomingTasks.slice(0, 3)"
               :key="task.id"
@@ -133,7 +136,6 @@
 import { ref, computed, type Ref, onMounted } from "vue";
 import { useTasks } from "~/composables/useTasks";
 import { useAuth } from "~/composables/useAuth";
-
 import { type ITask, TaskStatus } from "~/types/task";
 
 definePageMeta({
@@ -148,24 +150,32 @@ useSeoMeta({
 
 const { tasks, pending, error, refresh, updateTask, deleteTask } = useTasks();
 const { user: authUser } = useAuth();
-const toast = useToast(); // This correctly relies on Nuxt auto-import. Keep this line.
+const toast = useToast();
 
 onMounted(() => {
   console.log("Dashboard mounted. Calling useTasks.refresh().");
-  refresh(); 
+  refresh();
 });
 
+const showQuickAdd: Ref<boolean> = ref(false);
+const editingTask: Ref<ITask | null> = ref(null);
 
-const completedTasksCount = computed(
-  () => tasks.value?.filter((task: ITask) => task.status === TaskStatus.Completed).length || 0
+const completedTasksCount = computed(() =>
+  Array.isArray(tasks.value)
+    ? tasks.value.filter((task: ITask) => task.status === TaskStatus.Completed)
+        .length
+    : 0
 );
 
-const pendingTasksCount = computed(
-  () => tasks.value?.filter((task: ITask) => task.status === TaskStatus.Pending).length || 0
+const pendingTasksCount = computed(() =>
+  Array.isArray(tasks.value)
+    ? tasks.value.filter((task: ITask) => task.status === TaskStatus.Pending)
+        .length
+    : 0
 );
 
 const upcomingTasks = computed(() => {
-  if (!tasks.value) return [];
+  if (!Array.isArray(tasks.value)) return [];
   const now = new Date();
   return tasks.value
     .filter((task: ITask) => {
@@ -194,12 +204,14 @@ const handleTaskCreated = () => {
 const handleTaskUpdate = async (taskId: string, updates: Partial<ITask>) => {
   try {
     await updateTask(taskId, updates);
+    // FIX: Refresh tasks explicitly after an update to show changes
+    refresh();
     toast.add({
       title: "Task updated!",
       icon: "i-heroicons-check-circle",
       color: "green",
     });
-  } catch (err: any) { // Type `err` as `any` for toast.add compatibility
+  } catch (err: unknown) {
     toast.add({
       title: "Error updating task",
       description: (err as any).data?.message || "An unexpected error occurred.",
@@ -213,12 +225,14 @@ const handleTaskDelete = async (taskId: string) => {
   if (!confirm("Are you sure you want to delete this task?")) return;
   try {
     await deleteTask(taskId);
+    // FIX: Refresh tasks explicitly after a delete to show changes
+    refresh();
     toast.add({
       title: "Task deleted!",
       icon: "i-heroicons-trash",
       color: "orange",
     });
-  } catch (err: any) { // Type `err` as `any` for toast.add compatibility
+  } catch (err: unknown) {
     toast.add({
       title: "Error deleting task",
       description: (err as any).data?.message || "An unexpected error occurred.",
@@ -229,7 +243,10 @@ const handleTaskDelete = async (taskId: string) => {
 };
 
 const handleEditTask = (taskId: string) => {
-  const foundTask = tasks.value?.find((t: ITask) => t.id === taskId);
+  // FIX: Safely access find on tasks.value and explicitly type t
+  const foundTask = Array.isArray(tasks.value)
+    ? tasks.value.find((t: ITask) => t.id === taskId)
+    : undefined;
   if (foundTask) {
     editingTask.value = foundTask;
   }
@@ -239,12 +256,14 @@ const handleSaveEdit = async (taskId: string, updatedData: Partial<ITask>) => {
   try {
     await updateTask(taskId, updatedData);
     editingTask.value = null;
+    // FIX: Refresh tasks explicitly after saving edits
+    refresh();
     toast.add({
       title: "Task saved!",
       icon: "i-heroicons-check-circle",
       color: "green",
     });
-  } catch (err: any) { // Type `err` as `any` for toast.add compatibility
+  } catch (err: unknown) {
     toast.add({
       title: "Error saving task",
       description: (err as any).data?.message || "An unexpected error occurred.",
@@ -256,6 +275,9 @@ const handleSaveEdit = async (taskId: string, updatedData: Partial<ITask>) => {
 
 const formatDate = (dateString?: string) =>
   dateString
-    ? new Date(dateString).toLocaleDateString("en-US", { month: "short", day: "numeric" })
+    ? new Date(dateString).toLocaleDateString("en-US", {
+        month: "short",
+        day: "numeric",
+      })
     : "";
 </script>

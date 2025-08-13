@@ -3,6 +3,7 @@ import { defineEventHandler, getQuery, createError } from "h3";
 import mongoose from "mongoose";
 import { TaskModel } from "~/server/db/models/task";
 import { UserModel } from "~/server/db/models/user";
+import type { ITask } from "~/types/task"; // Import ITask for type consistency
 
 export default defineEventHandler(async (event) => {
   const query = getQuery(event) as Record<string, any>;
@@ -52,7 +53,6 @@ export default defineEventHandler(async (event) => {
         managerDoc?.managedProjects?.map((id: string) => new mongoose.Types.ObjectId(id)) || [];
 
       if (managedProjectIds.length > 0) {
-        // Manager can see own tasks OR tasks in managed projects
         andConditions.push({
           $or: [{ userId: userId }, { projectId: { $in: managedProjectIds } }],
         });
@@ -65,11 +65,11 @@ export default defineEventHandler(async (event) => {
       });
     }
   } else if (role === "field_officer") {
-    // Already restricted to own tasks
-    // Could also allow assignedTo: userId if desired
+    // Current filter is { userId: userId }. If Field Officers also need to see tasks
+    // assigned to them by others (where their ID is in task.assignedTo), add here.
+    // Example: andConditions.push({ $or: [{ userId: userId }, { assignedTo: userId }] });
   } else if (role === "dispatcher") {
-    // Currently sees only their own tasks
-    // Add dispatcher-specific RBAC rules here if needed
+    // Current filter is { userId: userId }. Add dispatcher-specific RBAC rules here if needed.
   }
 
   // 4. Combine filter
@@ -81,8 +81,29 @@ export default defineEventHandler(async (event) => {
   try {
     const tasks = await TaskModel.find(filter)
       .sort({ createdAt: -1 })
-      .lean();
-    return tasks || [];
+      .lean(); // .lean() is here, so transform manually below.
+
+    // FIX: Manually transform _id to id and remove __v for .lean() results
+    const transformedTasks: ITask[] = tasks.map(task => {
+        const plainTask: ITask = {
+            id: String(task._id), // Convert ObjectId to string and map to 'id'
+            title: task.title,
+            description: task.description,
+            status: task.status,
+            priority: task.priority,
+            dueDate: task.dueDate ? new Date(task.dueDate).toISOString() : undefined,
+            projectId: task.projectId ? String(task.projectId) : undefined,
+            createdAt: task.createdAt.toISOString(),
+            updatedAt: task.updatedAt.toISOString(),
+            userId: String(task.userId) // Ensure userId is also a string
+        };
+        // Explicitly delete _id and __v if you don't want them
+        delete (plainTask as any)._id; 
+        delete (plainTask as any).__v;
+        return plainTask;
+    });
+
+    return transformedTasks || [];
   } catch (err) {
     console.error("tasks.get: DB query error", err);
     throw createError({

@@ -140,7 +140,7 @@ const priorityId = useId();
 const dueDateId = useId();
 
 const props = defineProps<{
-  task: ITask;
+  task: ITask; // The task object passed to the modal
 }>();
 
 const emit = defineEmits<{
@@ -151,7 +151,7 @@ const emit = defineEmits<{
 const submitting = ref(false);
 
 interface EditForm {
-  id: string; // FIX: Changed from _id to id
+  id: string; // The ID of the task being edited
   title: string;
   description?: string | null;
   status: TaskStatus;
@@ -161,7 +161,7 @@ interface EditForm {
 }
 
 const form = ref<EditForm>({
-  id: "", // FIX: Changed from _id to id
+  id: "",
   title: "",
   description: null,
   status: TaskStatus.Pending,
@@ -170,28 +170,33 @@ const form = ref<EditForm>({
   projectId: null,
 });
 
+// Watch the prop.task and initialize the form reactive data
 watch(
   () => props.task,
   (newTask) => {
     if (newTask) {
       form.value = {
-        id: newTask.id, // FIX: Changed from _id to id
+        id: newTask.id, // FIX: Ensure ID is correctly taken from the prop
         title: newTask.title || "",
         description: newTask.description || null,
         status: newTask.status || TaskStatus.Pending,
         priority: newTask.priority || TaskPriority.Medium,
         dueDate: newTask.dueDate
-          ? new Date(newTask.dueDate).toISOString().split("T")[0]
+          ? new Date(newTask.dueDate).toISOString().split("T")[0] // Format for date input (YYYY-MM-DD)
           : null,
         projectId: newTask.projectId || null,
       };
     }
   },
-  { immediate: true, deep: true }
+  { immediate: true, deep: true } // immediate: true runs watch once on component mount
 );
 
 const handleSubmit = async () => {
-  if (!form.value.title?.trim() || submitting.value || !form.value.id) return;
+  // Validate form data, specifically if title or ID are missing
+  if (!form.value.title?.trim() || submitting.value || !form.value.id) {
+    // Optionally add a toast here for user feedback
+    return;
+  }
 
   submitting.value = true;
   try {
@@ -201,11 +206,12 @@ const handleSubmit = async () => {
       status: form.value.status,
       priority: form.value.priority,
       dueDate: form.value.dueDate
-        ? new Date(`${form.value.dueDate}T00:00:00`).toISOString()
+        ? new Date(`${form.value.dueDate}T00:00:00`).toISOString() // Convert to ISO string with time
         : undefined,
       projectId: form.value.projectId || undefined,
     };
 
+    // Clean up undefined values from payload for PATCH request
     Object.keys(payload).forEach((key) => {
       // @ts-ignore
       if (payload[key] === undefined) {
@@ -214,16 +220,17 @@ const handleSubmit = async () => {
       }
     });
 
-    // FIX: Emit 'id' instead of '_id'
+    // Emit the save event with the task's ID and the payload
     emit("save", form.value.id, payload);
   } catch (error) {
-    console.error("Error preparing task updates:", error);
+    console.error("Error preparing task updates in modal:", error);
   } finally {
     submitting.value = false;
   }
 };
 
 onMounted(() => {
+  // Handles closing modal with Escape key
   const handleEscape = (e: KeyboardEvent) =>
     e.key === "Escape" && emit("cancel");
   document.addEventListener("keydown", handleEscape);
