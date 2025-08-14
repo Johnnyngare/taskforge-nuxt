@@ -1,206 +1,210 @@
-// composables/useAuth.ts (The Absolute Final, Definitive Guard Logic)
+// composables/useAuth.ts
+import { ref, computed, readonly, watch } from 'vue';
+import { useCookie } from '#app';
+import { navigateTo } from '#app';
+import { useNuxtApp } from '#app';
+import { useNotifier } from '~/composables/useNotifier';
 
-import { readonly, computed } from "vue";
-import { useState, navigateTo } from "#app";
-import type { IUser } from "~/types/user";
-import { UserRole } from "~/types/user";
-import { useRequestEvent, useNuxtApp } from '#app';
-import { watch } from "vue"; // Watch is needed for fetchUser's Promise logic
+interface User {
+  id: string;
+  role: string;
+  email: string;
+  name?: string;
+  profilePhoto?: string;
+}
 
+const user = ref<User | null>(null);
+const loading = ref(false);
+const initialized = ref(false);
+const notifier = useNotifier();
 
 export const useAuth = () => {
-  const user = useState<IUser | null>("user", () => null);
-  const loading = useState<boolean>("auth-loading", () => false);
-  const initialized = useState<boolean>("auth-initialized", () => false);
-  const toast = useToast();
-
   const isAuthenticated = computed(() => !!user.value);
-  const isAdmin = computed(() => user.value?.role === UserRole.Admin);
-  const isTeamManager = computed(() => user.value?.role === UserRole.TeamManager);
-  const isFieldOfficer = computed(() => user.value?.role === UserRole.FieldOfficer);
-  const isDispatcher = computed(() => user.value?.role === UserRole.Dispatcher);
+  const isAdmin = computed(() => user.value?.role === 'admin');
+  const isTeamManager = computed(() => user.value?.role === 'manager');
+  const isFieldOfficer = computed(() => user.value?.role === 'field_officer');
+  const isDispatcher = computed(() => user.value?.role === 'dispatcher');
 
+  const setAuthenticatedUser = (userData: User) => {
+    user.value = userData;
+    initialized.value = true;
+    console.log('[useAuth] setAuthenticatedUser: User state set:', userData.id, userData.role, 'Name:', userData.name);
+  };
 
-  // fetchUser is the core function for universal (SSR + Client) state hydration.
-  const fetchUser = async () => {
-    console.log("useAuth: fetchUser started. Current user state:", user.value ? user.value.id : "null");
+  const clearUser = () => {
+    user.value = null;
+    initialized.value = true;
+    useCookie('auth_token').value = null;
+    console.log('[useAuth] clearUser: User state cleared.');
+  };
 
-    // CRITICAL FINAL GUARD LOGIC (REFINED):
-    // 1. If 'loading' is true, it means another fetchUser is already in flight.
-    //    We await its completion to avoid redundant fetches and race conditions.
-    if (loading.value) { 
+  const fetchUser = async (): Promise<boolean> => {
+    console.log("useAuth: fetchUser started. Current state - user:", user.value?.id || "null", "initialized:", initialized.value);
+    if (loading.value) {
       console.log("useAuth: fetchUser skipped (already loading, awaiting previous fetch).");
-      // Return a new promise that resolves when 'loading' becomes false
       return await new Promise(resolve => {
         const unwatch = watch(loading, (newVal) => {
-          if (!newVal) { // When loading becomes false
-            unwatch();
-            resolve(user.value ? true : false); // Resolve based on final user state
-          }
+          if (!newVal) { unwatch(); resolve(!!user.value); }
         });
       });
     }
 
-    // 2. If 'initialized' is true AND 'user.value' is set, state is valid.
-    //    This means SSR hydrated it, or a previous client fetch populated it.
-    if (initialized.value && user.value) {
-      console.log("useAuth: fetchUser skipped (already initialized with user).");
+    if (initialized.value && user.value && user.value.name && user.value.email) {
+      console.log("useAuth: fetchUser skipped (already fully hydrated with user and full data).");
       return true;
     }
 
-    // 3. If we reach here, 'loading' is false, and 'user.value' is null/not initialized.
-    //    We MUST initiate a fetch/hydration. Set loading and proceed.
-    loading.value = true; // Set loading to true ONLY ONCE at the start of a new fetch.
-    
-    let success = false; // Flag to track success within this specific execution path.
+    loading.value = true;
+    let success = false;
 
     try {
-      // --- SERVER-SIDE INITIALIZATION (SSR Hydration Attempt) ---
-      // This part runs on the server during the initial SSR render.
       if (process.server) {
         const nuxtApp = useNuxtApp();
         const event = nuxtApp.ssrContext?.event;
-        
         if (event && (event.context as any)?.user) {
           const contextUser = (event.context as any).user;
-          // Convert Mongoose Document to plain POJO for useState
           user.value = typeof contextUser.toJSON === 'function' ? contextUser.toJSON() : { ...contextUser };
-          console.log("useAuth: fetchUser hydrated from SSR context. User:", user.value?.id, user.value?.role); 
-          success = true; 
-          return true; // Stop server execution here if hydrated.
+          console.log("useAuth: fetchUser hydrated from SSR context. User:", user.value?.id, user.value?.role, 'Name:', user.value?.name);
+          success = true;
+          return true;
         }
-        console.log("useAuth: SSR context had no user or incomplete event. Proceeding to API fetch if on client.");
+        console.log("useAuth: SSR context had no user. Client will try API.");
       }
-      
-      // --- CLIENT-SIDE FALLBACK / Subsequent Fetches ---
-      // This part runs if:
-      // 1. process.client is true (always client-side).
-      // 2. process.server was true, but the SSR hydration attempt failed (user.value still null).
-      // This is the only path that makes the actual /api/auth/me API call to populate user.value.
-      console.log("useAuth: fetchUser calling /api/auth/me (client or unauthenticated SSR fallback). Current user state:", user.value ? user.value.id : "null");
-      const data = await $fetch<IUser>("/api/auth/me", { method: "GET" });
-      user.value = data; 
-      console.log("useAuth: fetchUser successful via API. User:", user.value.id, user.value.role);
-      success = true; 
-      return true;
+
+      console.log("useAuth: Calling /api/auth/me for user data (client or unauthenticated SSR fallback).");
+      const response: { statusCode: number; message: string; user?: User } = await $fetch("/api/auth/me", {
+        method: "GET",
+        credentials: "include"
+      });
+
+      if (response.statusCode === 200 && response.user) {
+        user.value = response.user;
+        console.log("useAuth: fetchUser successful via API. User:", user.value.id, user.value.role, 'Name:', user.value.name);
+        success = true;
+        return true;
+      } else {
+        console.warn("useAuth: API response for /api/auth/me missing user data or non-200 status:", response);
+        clearUser();
+        return false;
+      }
+
     } catch (e: any) {
-      user.value = null; 
-      console.error("useAuth: fetchUser failed via API:", e?.data?.message || e?.message || "Unknown error during fetchUser.");
-      success = false; 
+      user.value = null;
+      const errorMessage = e.response?._data?.message || e.message || "Unknown error during fetchUser.";
+      console.error("useAuth: fetchUser failed:", errorMessage);
+      if (process.client) { notifier.error({ title: "Session Expired", description: "Please log in again." }); }
       return false;
     } finally {
-      loading.value = false; // Always reset loading
-      initialized.value = true; // Always mark as initialized after an attempt
-      console.log(`useAuth: fetchUser finished. Final user state: ${user.value ? user.value.id : 'null'}. Success: ${success}.`);
+      loading.value = false;
+      initialized.value = true;
+      console.log(`useAuth: fetchUser finished. Final user: ${user.value?.id || 'null'}. Success: ${success}.`);
     }
   };
 
-  const register = async (userData: {
-    name: string;
-    email: string;
-    password: string;
-  }): Promise<boolean> => {
+  const register = async (userData: { name: string; email: string; password: string; role?: string }): Promise<boolean> => {
     loading.value = true;
-    console.log("useAuth: register started.");
     try {
-      const response = await $fetch<IUser>("/api/auth/register", {
+      console.log("useAuth: Register started for:", userData.email);
+      const response: { statusCode: number; message: string; user?: User } = await $fetch("/api/auth/register", {
         method: "POST",
         body: userData,
       });
-      
-      user.value = response; 
-      initialized.value = true; 
-      console.log("useAuth: register successful. User state updated.");
-      
-      // Crucial for HTTP-only cookies: force a full browser reload
-      if (process.client) { 
-        window.location.href = '/dashboard'; 
-      } else { 
-        await navigateTo("/dashboard"); // Fallback for SSR redirect
+
+      if (response.statusCode === 200 && response.user) {
+        user.value = response.user;
+        initialized.value = true;
+        console.log("useAuth: Register successful. User state updated. Redirecting to dashboard.");
+        notifier.success({ title: "Welcome!", description: "Registration successful. You are now logged in." });
+        if (process.client) { window.location.href = '/dashboard'; } else { await navigateTo("/dashboard"); }
+        return true;
+      } else {
+        const msg = response?.message || "Registration failed (API response problem).";
+        console.error("useAuth: Register API responded unexpectedly:", response.statusCode, response);
+        notifier.error({ title: "Registration Failed", description: msg });
+        throw new Error(msg);
       }
-      console.log("useAuth: Navigating with full reload to /dashboard after registration.");
-      
-      toast.add({
-        title: "Welcome!",
-        description: "Registration successful. You are now logged in.",
-        icon: "i-heroicons-check-circle",
-        color: "green",
-      });
-      return true;
-    } catch (error) {
+    } catch (error: any) {
       user.value = null;
-      console.error("useAuth: register failed:", error?.data?.message || error?.message || "Unknown error during registration.");
+      const msg = error?.response?._data?.message || error?.message || "Unknown error during registration.";
+      console.error("useAuth: Register failed:", msg);
+      notifier.error({ title: "Registration Failed", description: msg });
       throw error;
     } finally {
       loading.value = false;
-      console.log("useAuth: register finished.");
+      console.log("useAuth: Register finished.");
     }
   };
 
   const login = async (credentials: { email: string; password: string }): Promise<boolean> => {
     loading.value = true;
-    console.log("useAuth: login started.");
     try {
-      const loggedInUser = await $fetch<IUser>("/api/auth/login", {
+      console.log("useAuth: Login started for:", credentials.email);
+      const response: { statusCode: number; message: string; user?: User } = await $fetch("/api/auth/login", {
         method: "POST",
         body: credentials,
       });
-      
-      user.value = loggedInUser; 
-      initialized.value = true;
-      console.log("useAuth: Login API call successful. User set to:", user.value.id, user.value.role);
-      
-      // Crucial for HTTP-only cookies: force a full browser reload
-      if (process.client) { 
-        window.location.href = '/dashboard'; 
-      } else { 
-        await navigateTo("/dashboard"); // Fallback for SSR redirect
-      }
-      console.log("useAuth: Navigating with full reload to /dashboard.");
-      
-      toast.add({
-        title: "Welcome back!",
-        description: "Successfully signed in.",
-        icon: "i-heroicons-check-circle",
-        color: "green",
-      });
-      console.log("useAuth: Toast added after navigation.");
 
-      return true;
-    } catch (error) {
+      if (response.statusCode === 200 && response.user) {
+        user.value = response.user;
+        initialized.value = true;
+        console.log("useAuth: Login successful. User state updated. Redirecting to dashboard.");
+        notifier.success({ title: "Welcome back!", description: "Successfully signed in." });
+        if (process.client) { window.location.href = '/dashboard'; } else { await navigateTo("/dashboard"); }
+        return true;
+      } else {
+        const msg = response?.message || "Login failed (API response problem).";
+        console.error("useAuth: Login API responded unexpectedly:", response.statusCode, response);
+        notifier.error({ title: "Login Failed", description: msg });
+        throw new Error(msg);
+      }
+    } catch (error: any) {
       user.value = null;
-      console.error("useAuth: login failed:", error?.data?.message || error?.message || "Unknown error during login.");
+      const msg = error?.response?._data?.message || error?.message || "Invalid credentials or server error.";
+      console.error("useAuth: Login failed:", msg);
+      notifier.error({ title: "Login Failed", description: msg });
       throw error;
     } finally {
       loading.value = false;
-      console.log("useAuth: login finished.");
+      console.log("useAuth: Login finished.");
     }
   };
 
   const logout = async (): Promise<boolean> => {
     loading.value = true;
-    console.log("useAuth: logout started.");
     try {
-      await $fetch("/api/auth/logout", { method: "POST" });
-      user.value = null;
-      initialized.value = false;
-      console.log("useAuth: Logout API call successful. User state cleared.");
-      await navigateTo("/login"); 
-      console.log("useAuth: Navigated to /login after logout.");
-      return true;
-    } catch (error) {
-      console.error("useAuth: logout failed:", error?.data?.message || error?.message || "Unknown error during logout.");
+      console.log("useAuth: Logout started.");
+      const response: { statusCode: number; message: string } = await $fetch("/api/auth/logout", {
+        method: "POST",
+        credentials: 'include'
+      });
+
+      if (response.statusCode === 200) {
+        clearUser();
+        console.log("useAuth: Logout successful. Redirecting to login.");
+        notifier.info({ title: "Logged Out", description: "You have been successfully logged out." });
+        await navigateTo("/login");
+        return true;
+      } else {
+        const msg = response?.message || "Logout failed (API response problem).";
+        console.error("useAuth: Logout API responded unexpectedly:", response.statusCode, response);
+        notifier.error({ title: "Logout Failed", description: msg });
+        throw new Error(msg);
+      }
+    } catch (error: any) {
+      const msg = error?.response?._data?.message || error?.message || "Unknown error during logout.";
+      console.error("useAuth: Logout failed:", msg);
+      notifier.error({ title: "Logout Failed", description: msg });
       throw error;
     } finally {
       loading.value = false;
-      console.log("useAuth: logout finished.");
+      console.log("useAuth: Logout finished.");
     }
   };
 
   return {
     user: readonly(user),
-    loading,
-    initialized,
+    loading: readonly(loading),
+    initialized: readonly(initialized),
     isAuthenticated,
     isAdmin,
     isTeamManager,
@@ -210,5 +214,7 @@ export const useAuth = () => {
     login,
     logout,
     fetchUser,
+    setAuthenticatedUser,
+    clearUser,
   };
 };

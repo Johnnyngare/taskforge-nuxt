@@ -1,59 +1,84 @@
 // server/api/projects/index.get.ts
-import { defineEventHandler, getQuery, createError } from "h3";
+import { defineEventHandler, createError } from "h3";
+// IMPORTANT: You need to import your actual Project and Task models.
+// If your models are using Mongoose, you'll need `mongoose` for `Types.ObjectId`.
 import { ProjectModel } from "~/server/db/models/project";
-import { TaskModel } from "~/server/db/models/task";
+import { TaskModel } from "~/server/db/models/task"; // Assuming TaskModel for completion rate
 import mongoose from "mongoose";
+import { projectStore } from "~/server/utils/projectStore";
 
 export default defineEventHandler(async (event) => {
-  const query = getQuery(event);
-  const ctxUser = event.context?.user;
+  const ctxUser: { id: string; role: string; name?: string; email?: string } | undefined = event.context?.user;
 
-  // 1. Auth check
-  if (!ctxUser?.id) {
-    console.warn("projects.get: Unauthorized attempt to fetch projects. No user context.");
+  if (!ctxUser || !ctxUser.id || !ctxUser.role) {
+    console.warn("[API GET /projects] Unauthorized attempt to fetch projects. No complete user context.");
     throw createError({
       statusCode: 401,
-      statusMessage: "Unauthorized: User not authenticated.",
+      message: "Unauthorized: User not authenticated.",
     });
   }
 
-  const role = ctxUser.role;
-  const userId = new mongoose.Types.ObjectId(ctxUser.id);
-
-  // 2. RBAC filter
-  let filter: Record<string, any> = {};
-  if (role !== "admin") {
-    // Non-admins: see projects they own or are members of
-    filter.$or = [{ owner: userId }, { members: userId }];
-  }
+  const userRole = ctxUser.role;
+  const userId = ctxUser.id;
 
   try {
-    // 3. Fetch projects
-    const projects = await ProjectModel.find(filter).lean();
+    const projects = projectStore.getProjects(userId, userRole);
 
-    // 4. Append completion rate to each project
+    // --- Mongoose/Database Example ---
+    /*
+    let filter: Record<string, any> = {};
+    if (userRole !== "admin") {
+      filter.$or = [
+        { owner: new mongoose.Types.ObjectId(userId) },
+        { members: new mongoose.Types.ObjectId(userId) }
+      ];
+    }
+    const projects = await ProjectModel.find(filter).lean();
+    */
+
     const projectsWithCompletion = await Promise.all(
       projects.map(async (project) => {
-        const [totalTasks, completedTasks] = await Promise.all([
-          TaskModel.countDocuments({ projectId: project._id }),
-          TaskModel.countDocuments({ projectId: project._id, status: "completed" }),
-        ]);
+        const projectIdForTasks = project.id;
+        
+        let totalTasks = 0;
+        let completedTasks = 0;
+
+        /*
+        try {
+          const [dbTotalTasks, dbCompletedTasks] = await Promise.all([
+            TaskModel.countDocuments({ projectId: new mongoose.Types.ObjectId(projectIdForTasks) }),
+            TaskModel.countDocuments({ projectId: new mongoose.Types.ObjectId(projectIdForTasks), status: "completed" }),
+          ]);
+          totalTasks = dbTotalTasks;
+          completedTasks = dbCompletedTasks;
+        } catch (taskErr) {
+          console.warn(`[API GET /projects] Failed to count tasks for project ${projectIdForTasks}:`, (taskErr as Error).message);
+        }
+        */
 
         const completionRate = totalTasks > 0 ? (completedTasks / totalTasks) * 100 : 0;
 
         return {
           ...project,
+          totalTasks: totalTasks,
+          completedTasks: completedTasks,
           completionRate: Math.round(completionRate),
         };
       })
     );
 
-    return projectsWithCompletion;
-  } catch (error) {
-    console.error("projects.get: Database error", error);
+    console.log(`[API GET /projects] Returning ${projectsWithCompletion.length} projects for user ${userId} (${userRole}).`);
+    return {
+      statusCode: 200,
+      message: "Projects retrieved successfully",
+      projects: projectsWithCompletion,
+    };
+  } catch (error: any) {
+    console.error("[API GET /projects] Server error fetching projects:", error?.message || error);
     throw createError({
-      statusCode: 500,
-      statusMessage: "Failed to fetch projects due to database error.",
+      statusCode: error.statusCode || 500,
+      statusMessage: error.statusMessage || "Failed to fetch projects due to server error.",
+      message: error.message,
     });
   }
 });

@@ -1,4 +1,4 @@
-<!-- pages/dashboard/projects.vue -->
+<!-- pages/dashboard/projects/index.vue -->
 <template>
   <div>
     <!-- Page Header -->
@@ -25,6 +25,7 @@
     <!-- Projects Grid -->
     <div v-if="pending" class="flex justify-center py-12">
       <UiSpinner class="h-8 w-8 text-blue-600" />
+      <p class="ml-2 text-blue-600">Loading projects...</p>
     </div>
     <div v-else-if="error" class="py-12 text-center">
       <Icon
@@ -34,11 +35,12 @@
       <h3 class="mb-2 text-lg font-medium text-gray-900">
         Failed to load projects
       </h3>
+      <p class="text-red-600">{{ error.message }}</p>
       <FormAppButton @click="refresh" variant="secondary">
         Try Again
       </FormAppButton>
     </div>
-    <div v-else-if="!projects.length" class="py-12 text-center">
+    <div v-else-if="!projects || projects.length === 0" class="py-12 text-center">
       <Icon
         name="heroicons:folder-plus"
         class="mx-auto mb-6 h-16 w-16 text-gray-400"
@@ -54,9 +56,9 @@
     <div v-else class="grid grid-cols-1 gap-6 md:grid-cols-2 lg:grid-cols-3">
       <div
         v-for="project in projects"
-        :key="project._id"
+        :key="project.id"
         class="group cursor-pointer rounded-xl border border-gray-200 bg-white p-6 transition-all duration-200 hover:shadow-lg"
-        @click="navigateToProject(project._id)"
+        @click="navigateToProject(project.id)"
       >
         <div class="mb-4 flex items-start justify-between">
           <h3
@@ -102,31 +104,66 @@
   </div>
 </template>
 
-<script setup>
+<script setup lang="ts">
 import { ref } from "vue";
+import { useNotifier } from "~/composables/useNotifier";
+import { useProjects } from "~/composables/useProjects";
+import { ProjectStatus, ProjectPriority, type IProject } from "~/types/project";
+import { navigateTo } from '#app';
 
-definePageMeta({ layout: "dashboard", middleware: "02-auth" }); // ✅ fixed name to match file
+definePageMeta({ layout: "dashboard", middleware: "02-auth" });
 useSeoMeta({
   title: "Projects - TaskForge",
   description: "Manage your projects and organize your work.",
 });
 
+const notifier = useNotifier();
+
 const { projects, pending, error, refresh, createProject, updateProject } =
   useProjects();
 
 const showCreateModal = ref(false);
-const editingProject = ref(null);
+const editingProject = ref<IProject | null>(null);
 
-const navigateToProject = (projectId) =>
-  navigateTo(`/dashboard/projects/${projectId}`);
+const navigateToProject = (projectId: string) => {
+  console.log(`[projects.vue] DEBUG: navigateToProject called with projectId: "${projectId}"`);
+  const targetPath = `/dashboard/projects/${projectId}`;
+  console.log(`[projects.vue] DEBUG: Constructed target path: "${targetPath}"`);
+  navigateTo(targetPath);
+};
 
-const handleSaveProject = async (projectData) => {
-  if (editingProject.value) {
-    await updateProject(editingProject.value._id, projectData);
-  } else {
-    await createProject(projectData);
+const handleSaveProject = async (projectData: Partial<IProject>) => {
+  let response;
+  try {
+    if (editingProject.value) {
+      if (!editingProject.value.id) {
+        notifier.error("Error: Cannot update project without an ID.");
+        return;
+      }
+      notifier.info("Updating project...");
+      response = await updateProject(editingProject.value.id, projectData);
+    } else {
+      notifier.info("Creating new project...");
+      response = await createProject(projectData);
+    }
+
+    if (response && response.statusCode && response.statusCode >= 200 && response.statusCode < 300) {
+      notifier.success(response.message || "Project saved successfully!");
+      handleCancelModal();
+      if (response.project?.id) {
+        console.log(`[projects.vue] DEBUG: Navigating to new project details: ${response.project.id}`);
+        navigateToProject(response.project.id);
+      }
+    } else {
+      const errorMessage = response?.message || "An unknown error occurred.";
+      notifier.error(`Failed to save project: ${errorMessage}`);
+      console.error('API Error Response:', response);
+    }
+  } catch (err: any) {
+    console.error("Failed to save project in handleSaveProject:", err);
+    const errorMessage = err.message || "An unexpected error occurred during project saving.";
+    notifier.error(`Operation failed: ${errorMessage}`);
   }
-  handleCancelModal();
 };
 
 const handleCancelModal = () => {
@@ -134,30 +171,30 @@ const handleCancelModal = () => {
   editingProject.value = null;
 };
 
-const getStatusClass = (status) =>
+const getStatusClass = (status: ProjectStatus) =>
   ({
-    active: "bg-green-100 text-green-700",
-    completed: "bg-blue-100 text-blue-700",
-    on_hold: "bg-yellow-100 text-yellow-700",
-    cancelled: "bg-red-100 text-red-700",
+    [ProjectStatus.Active]: "bg-green-100 text-green-700",
+    [ProjectStatus.Completed]: "bg-blue-100 text-blue-700",
+    [ProjectStatus.OnHold]: "bg-yellow-100 text-yellow-700",
+    [ProjectStatus.Cancelled]: "bg-red-100 text-red-700",
   }[status] || "bg-gray-100 text-gray-700");
 
-const getStatusLabel = (status) =>
+const getStatusLabel = (status: ProjectStatus) =>
   ({
-    active: "Active",
-    completed: "Completed",
-    on_hold: "On Hold",
-    cancelled: "Cancelled",
+    [ProjectStatus.Active]: "Active",
+    [ProjectStatus.Completed]: "Completed",
+    [ProjectStatus.OnHold]: "On Hold",
+    [ProjectStatus.Cancelled]: "Cancelled",
   }[status] || "N/A");
 
-const getProgressBarClass = (rate) => {
+const getProgressBarClass = (rate: number) => {
   if (rate === 100) return "bg-green-500";
   if (rate >= 75) return "bg-blue-500";
   if (rate >= 50) return "bg-yellow-500";
   return "bg-orange-500";
 };
 
-const formatRelativeDate = (dateString) => {
+const formatRelativeDate = (dateString: string) => {
   const diff = Date.now() - new Date(dateString).getTime();
   const hours = Math.floor(diff / 3600000);
   if (hours < 24) return `${hours}h ago`;

@@ -1,46 +1,62 @@
 // server/middleware/auth.ts
-
 import { defineEventHandler, getCookie } from "h3";
-import { verifyJwt } from "~/server/utils/jwtHelper"; // Imports server-only helper
+import { verifyJwt } from "~/server/utils/jwtHelper";
+import { UserModel } from "~/server/db/models/user";
+import type { UserRole } from "~/types/user";
+
+interface JwtPayload {
+  id: string;
+  role: UserRole;
+}
 
 export default defineEventHandler(async (event) => {
   const url = event.node?.req?.url;
 
-  // FIX: Skip authentication for known internal Nuxt/Vite paths that don't have full HTTP contexts.
-  if (url && (url.startsWith('/__nuxt_icon') || url.startsWith('/__nuxt_error') || url.startsWith('/_nuxt/'))) {
-    // console.log(`SERVER MIDDLEWARE: Skipping internal URL: ${url}`); // Uncomment for debugging if needed
+  if (url && (
+      url.startsWith('/__nuxt_icon') ||
+      url.startsWith('/__nuxt_error') ||
+      url.startsWith('/_nuxt/') ||
+      url === '/favicon.ico' ||
+      url.startsWith('/api/auth/login') ||
+      url.startsWith('/api/auth/register')
+  )) {
     return;
   }
-  
-  // FIX: CRITICAL GUARD for 'Cannot read properties of undefined (reading 'req')'
-  // Ensure event, event.node, event.node.req, and event.node.req.headers are defined before proceeding.
+
   if (!event || !event.node || !event.node.req || !event.node.req.headers) {
       console.error("SERVER MIDDLEWARE ERROR: Incomplete event context (missing req/headers). Skipping auth check for URL:", url || 'unknown');
-      return; 
+      return;
   }
 
-  // --- LOGGING ---
   console.log("\nSERVER MIDDLEWARE - Processing Request:");
-  console.log("  URL:", url); // Use event.node.req.url directly now that it's guarded
-  // --- END LOGGING ---
+  console.log("  URL:", url);
 
   const token = getCookie(event, "auth_token");
+  event.context.user = null;
 
-  // --- LOGGING ---
   console.log("  Cookie 'auth_token' received (truncated):", token ? token.substring(0, 30) + '...' : "NOT_FOUND_OR_EMPTY");
-  // --- END LOGGING ---
 
   if (!token) {
-    console.log("  SERVER MIDDLEWARE: No token found. Skipping authentication.");
+    console.log("  SERVER MIDDLEWARE: No token found. User context remains null.");
     return;
   }
 
-  const decoded = await verifyJwt(token); // verifyJwt is awaited and returns decoded payload or null
+  const decoded: JwtPayload | null = await verifyJwt(token);
 
-  if (decoded) {
-    event.context.user = decoded; // Attach user to context for subsequent server API handlers
-    console.log("  SERVER MIDDLEWARE: User context set for:", decoded.id, decoded.role);
+  if (decoded && decoded.id && decoded.role) {
+    try {
+      const userFromDb = await UserModel.findById(decoded.id).select("name email role profilePhoto provider");
+
+      if (userFromDb) {
+        event.context.user = userFromDb.toJSON();
+        console.log("  SERVER MIDDLEWARE: User context set from DB for:", userFromDb.id, userFromDb.role, "Name:", userFromDb.name);
+      } else {
+        console.warn(`  SERVER MIDDLEWARE: User ID ${decoded.id} from token not found in DB. Invalidating token.`);
+      }
+    } catch (dbError: any) {
+      console.error("  SERVER MIDDLEWARE: Database error fetching user for token:", dbError.message);
+    }
   } else {
-    console.log("  SERVER MIDDLEWARE: Invalid token, context not set.");
+    console.log("  SERVER MIDDLEWARE: Invalid/expired token, user context not set.");
   }
 });
