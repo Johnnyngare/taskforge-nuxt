@@ -3,90 +3,102 @@ import { defineEventHandler, getQuery, createError } from "h3";
 import mongoose from "mongoose";
 import { TaskModel } from "~/server/db/models/task";
 import { UserModel } from "~/server/db/models/user";
-import type { ITask } from "~/types/task"; // Import ITask for type consistency
+import { ProjectModel } from "~/server/db/models/project";
+import type { ITask } from "~/types/task";
 
 export default defineEventHandler(async (event) => {
-  const query = getQuery(event) as Record<string, any>;
-  const ctxUser = event.context?.user;
+  // CRITICAL FIX: Robustly access ctxUser.
+  // Although middleware sets it, in async/SSR scenarios, it can sometimes appear undefined
+  // if accessed too early or if the request is subtly different.
+  const ctxUser: { id: string; role: string; name?: string; email?: string } | undefined = event.context?.user;
+  console.log(`[API GET /tasks] --- START Processing Request --- URL: ${event.node?.req?.url}`);
+  console.log("[API GET /tasks] User Context on entry (from middleware):", ctxUser ? { id: ctxUser.id, role: ctxUser.role, name: ctxUser.name } : "Not set (or null)");
 
-  // 1. Authentication check
-  if (!ctxUser?.id) {
-    console.warn("tasks.get: Unauthorized attempt to fetch tasks. No user context.");
+
+  // 1. Authentication Check (now relies on middleware having fully authenticated)
+  // This check MUST be reliable.
+  if (!ctxUser || !ctxUser.id || !ctxUser.role) {
+    console.warn("[API GET /tasks] Unauthorized attempt to fetch tasks. No complete user context. ctxUser:", ctxUser);
     throw createError({
       statusCode: 401,
-      statusMessage: "Unauthorized: User not authenticated.",
+      message: "Unauthorized: User not authenticated.",
     });
   }
 
   const role = ctxUser.role;
   const userId = new mongoose.Types.ObjectId(ctxUser.id);
+  console.log(`[API GET /tasks] Authenticated User: ${userId} (Role: ${role})`);
 
-  // 2. Build filter and conditions
+  const query = getQuery(event) as Record<string, any>;
   let filter: Record<string, any> = {};
   const andConditions: Record<string, any>[] = [];
 
-  // Default ownership condition
-  if (role !== "admin") {
-    andConditions.push({ userId: userId });
-  }
-
-  // Query param filters
+  // Add task status filter if present
   if (query.status) {
     andConditions.push({ status: query.status });
   }
+
+  // 1. RBAC for `tasks.get` (Who can *see* which tasks)
+  if (role === "admin") {
+    console.log("[API GET /tasks] Admin fetching all tasks (no additional RBAC filter applied).");
+  } else {
+    // Non-admins: Filter based on ownership or project membership/management
+    const accessibleProjectIds: mongoose.Types.ObjectId[] = [];
+
+    const [ownedProjects, memberProjects] = await Promise.all([
+      ProjectModel.find({ owner: userId }).select('_id').lean(),
+      ProjectModel.find({ members: userId }).select('_id').lean()
+    ]);
+    accessibleProjectIds.push(...ownedProjects.map(p => p._id));
+    accessibleProjectIds.push(...memberProjects.map(p => p._id));
+
+    if (role === "manager") { // Assuming 'manager' role for TeamManager
+      const managerDoc = await UserModel.findById(userId).select('managedProjects').lean();
+      if (managerDoc?.managedProjects) {
+        accessibleProjectIds.push(...managerDoc.managedProjects.map(id => new mongoose.Types.ObjectId(id)));
+      }
+    }
+    
+    const uniqueAccessibleProjectIds = [...new Set(accessibleProjectIds.filter(id => id && mongoose.Types.ObjectId.isValid(id)))];
+    console.log(`[API GET /tasks] User ${userId} (${role}) has access to projects: ${uniqueAccessibleProjectIds.length} unique IDs.`);
+
+    andConditions.push({
+      $or: [
+        { userId: userId }, // Task is owned by user
+        { assignedTo: userId }, // Task is assigned to user
+        { projectId: { $in: uniqueAccessibleProjectIds } } // Task belongs to an accessible project
+      ],
+    });
+  }
+
+  // 2. Project ID Filter (from query param)
   if (query.projectId) {
     if (!mongoose.Types.ObjectId.isValid(query.projectId)) {
-      throw createError({ statusCode: 400, statusMessage: "Invalid Project ID format." });
+      console.warn(`[API GET /tasks] Invalid Project ID format in query: ${query.projectId}`);
+      throw createError({ statusCode: 400, message: "Invalid Project ID format." });
     }
-    andConditions.push({ projectId: new mongoose.Types.ObjectId(query.projectId) });
+    const queryProjectId = new mongoose.Types.ObjectId(query.projectId);
+    andConditions.push({ projectId: queryProjectId });
   }
+  console.log(`[API GET /tasks] Filter conditions before final build: ${andConditions.length} conditions`);
 
-  // 3. Role-based access control
-  if (role === "admin") {
-    // Admins see everything (no userId restriction)
-  } else if (role === "team_manager") {
-    try {
-      const managerDoc = await UserModel.findById(userId)
-        .select("managedProjects")
-        .lean();
-      const managedProjectIds =
-        managerDoc?.managedProjects?.map((id: string) => new mongoose.Types.ObjectId(id)) || [];
 
-      if (managedProjectIds.length > 0) {
-        andConditions.push({
-          $or: [{ userId: userId }, { projectId: { $in: managedProjectIds } }],
-        });
-      }
-    } catch (err) {
-      console.error("tasks.get: error fetching manager projects for RBAC", err);
-      throw createError({
-        statusCode: 500,
-        statusMessage: "Error applying manager role filter.",
-      });
-    }
-  } else if (role === "field_officer") {
-    // Current filter is { userId: userId }. If Field Officers also need to see tasks
-    // assigned to them by others (where their ID is in task.assignedTo), add here.
-    // Example: andConditions.push({ $or: [{ userId: userId }, { assignedTo: userId }] });
-  } else if (role === "dispatcher") {
-    // Current filter is { userId: userId }. Add dispatcher-specific RBAC rules here if needed.
-  }
-
-  // 4. Combine filter
+  // Combine all conditions
   if (andConditions.length > 0) {
     filter = andConditions.length === 1 ? andConditions[0] : { $and: andConditions };
   }
+  console.log("[API GET /tasks] Final MongoDB filter:", JSON.stringify(filter));
 
-  // 5. Query DB
+
+  // 3. Query DB
   try {
     const tasks = await TaskModel.find(filter)
       .sort({ createdAt: -1 })
-      .lean(); // .lean() is here, so transform manually below.
+      .lean();
 
-    // FIX: Manually transform _id to id and remove __v for .lean() results
     const transformedTasks: ITask[] = tasks.map(task => {
         const plainTask: ITask = {
-            id: String(task._id), // Convert ObjectId to string and map to 'id'
+            id: String(task._id),
             title: task.title,
             description: task.description,
             status: task.status,
@@ -95,20 +107,25 @@ export default defineEventHandler(async (event) => {
             projectId: task.projectId ? String(task.projectId) : undefined,
             createdAt: task.createdAt.toISOString(),
             updatedAt: task.updatedAt.toISOString(),
-            userId: String(task.userId) // Ensure userId is also a string
+            userId: String(task.userId),
+            assignedTo: task.assignedTo ? task.assignedTo.map(String) : [],
         };
-        // Explicitly delete _id and __v if you don't want them
-        delete (plainTask as any)._id; 
-        delete (plainTask as any).__v;
         return plainTask;
     });
 
-    return transformedTasks || [];
-  } catch (err) {
-    console.error("tasks.get: DB query error", err);
+    console.log(`[API GET /tasks] Successfully retrieved ${transformedTasks.length} tasks.`);
+    return {
+      statusCode: 200,
+      message: "Tasks retrieved successfully",
+      tasks: transformedTasks,
+    };
+  } catch (err: any) {
+    console.error("[API GET /tasks] DB query error:", err?.message || err, err);
     throw createError({
-      statusCode: 500,
-      statusMessage: "Failed to fetch tasks due to database error.",
+      statusCode: err.statusCode || 500,
+      message: "Failed to fetch tasks due to database error.",
     });
+  } finally {
+    console.log("[API GET /tasks] --- END Request Processing ---");
   }
 });

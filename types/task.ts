@@ -20,9 +20,9 @@ export interface ITask {
   status: TaskStatus;
   priority: TaskPriority;
   dueDate?: string; // ISO date string
-  projectId?: string; // Should also be string (transformed from ObjectId)
+  projectId?: string; // Should be string (transformed from ObjectId)
   createdAt: string; // ISO date string
   updatedAt: string; // ISO date string
-  userId: string; // FIX: Add userId to ITask (owner of the task)
-  assignedTo?: string; // FIX: Add assignedTo to ITask (if tasks can be assigned)
+  userId: string; // Owner of the task (creator)
+  assignedTo?: string[]; // FIX: Change to string[] to match backend model
 }

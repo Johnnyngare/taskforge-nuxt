@@ -17,6 +17,7 @@
             type="button"
             @click="$emit('cancel')"
             class="p-1 text-slate-400 transition-colors hover:text-slate-200"
+            title="Close"
           >
             <Icon name="heroicons:x-mark" class="h-6 w-6" />
           </button>
@@ -65,10 +66,10 @@
                 class="w-full rounded-lg border border-slate-600 bg-slate-700 px-3 py-2 text-slate-200 transition-colors focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20"
                 :disabled="submitting"
               >
-                <option value="pending">Pending</option>
-                <option value="in_progress">In Progress</option>
-                <option value="completed">Completed</option>
-                <option value="cancelled">Cancelled</option>
+                <option :value="TaskStatus.Pending">Pending</option>
+                <option :value="TaskStatus.InProgress">In Progress</option>
+                <option :value="TaskStatus.Completed">Completed</option>
+                <option :value="TaskStatus.Cancelled">Cancelled</option>
               </select>
             </div>
             <div>
@@ -83,10 +84,10 @@
                 class="w-full rounded-lg border border-slate-600 bg-slate-700 px-3 py-2 text-slate-200 transition-colors focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20"
                 :disabled="submitting"
               >
-                <option value="Low">Low</option>
-                <option value="Medium">Medium</option>
-                <option value="High">High</option>
-                <option value="Urgent">Urgent</option>
+                <option :value="TaskPriority.Low">Low</option>
+                <option :value="TaskPriority.Medium">Medium</option>
+                <option :value="TaskPriority.High">High</option>
+                <option :value="TaskPriority.Urgent">Urgent</option>
               </select>
             </div>
           </div>
@@ -103,6 +104,31 @@
               class="w-full rounded-lg border border-slate-600 bg-slate-700 px-3 py-2 text-slate-200 transition-colors focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20"
               :disabled="submitting"
             />
+          </div>
+
+          <!-- New: Project Selector for Editing -->
+          <div>
+            <label
+              for="edit-task-project"
+              class="mb-2 block text-sm font-medium text-slate-300"
+            >
+              Assign to Project (optional)
+            </label>
+            <select
+              id="edit-task-project"
+              v-model="form.projectId"
+              class="w-full rounded-lg border border-slate-600 bg-slate-700 px-3 py-2 text-slate-200 transition-colors focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20"
+              :disabled="submitting || projectsPending"
+            >
+              <option :value="null">No Project</option>
+              <option v-if="projectsPending" disabled>Loading projects...</option>
+              <option v-for="p in projects" :key="p.id" :value="p.id">
+                {{ p.name }}
+              </option>
+            </select>
+            <p v-if="projectsError" class="mt-1 text-xs text-rose-400">
+              Error loading projects: {{ projectsError.message }}
+            </p>
           </div>
         </div>
 
@@ -131,7 +157,9 @@
 
 <script setup lang="ts">
 import { ref, watch, onMounted, onUnmounted } from "vue";
+import { useId } from '#app';
 import { TaskPriority, TaskStatus, type ITask } from "~/types/task";
+import { useProjects } from "~/composables/useProjects"; // Import useProjects
 
 const titleId = useId();
 const descriptionId = useId();
@@ -149,6 +177,7 @@ const emit = defineEmits<{
 }>();
 
 const submitting = ref(false);
+const { projects, pending: projectsPending, error: projectsError } = useProjects(); // Fetch projects
 
 interface EditForm {
   id: string; // The ID of the task being edited
@@ -157,7 +186,8 @@ interface EditForm {
   status: TaskStatus;
   priority: TaskPriority;
   dueDate?: string | null;
-  projectId?: string | null;
+  projectId?: string | null; // Add projectId
+  assignedTo?: string[]; // Add assignedTo for consistency, even if not edited here
 }
 
 const form = ref<EditForm>({
@@ -167,7 +197,8 @@ const form = ref<EditForm>({
   status: TaskStatus.Pending,
   priority: TaskPriority.Medium,
   dueDate: null,
-  projectId: null,
+  projectId: null, // Initialize projectId
+  assignedTo: [], // Initialize assignedTo
 });
 
 // Watch the prop.task and initialize the form reactive data
@@ -176,7 +207,7 @@ watch(
   (newTask) => {
     if (newTask) {
       form.value = {
-        id: newTask.id, // FIX: Ensure ID is correctly taken from the prop
+        id: newTask.id,
         title: newTask.title || "",
         description: newTask.description || null,
         status: newTask.status || TaskStatus.Pending,
@@ -184,17 +215,16 @@ watch(
         dueDate: newTask.dueDate
           ? new Date(newTask.dueDate).toISOString().split("T")[0] // Format for date input (YYYY-MM-DD)
           : null,
-        projectId: newTask.projectId || null,
+        projectId: newTask.projectId || null, // Hydrate projectId
+        assignedTo: newTask.assignedTo || [], // Hydrate assignedTo
       };
     }
   },
-  { immediate: true, deep: true } // immediate: true runs watch once on component mount
+  { immediate: true, deep: true }
 );
 
 const handleSubmit = async () => {
-  // Validate form data, specifically if title or ID are missing
   if (!form.value.title?.trim() || submitting.value || !form.value.id) {
-    // Optionally add a toast here for user feedback
     return;
   }
 
@@ -206,9 +236,10 @@ const handleSubmit = async () => {
       status: form.value.status,
       priority: form.value.priority,
       dueDate: form.value.dueDate
-        ? new Date(`${form.value.dueDate}T00:00:00`).toISOString() // Convert to ISO string with time
+        ? new Date(`${form.value.dueDate}T00:00:00Z`).toISOString() // Convert to ISO string with time
         : undefined,
-      projectId: form.value.projectId || undefined,
+      projectId: form.value.projectId || undefined, // Include projectId
+      // assignedTo: form.value.assignedTo, // Include assignedTo if editable
     };
 
     // Clean up undefined values from payload for PATCH request
@@ -220,7 +251,6 @@ const handleSubmit = async () => {
       }
     });
 
-    // Emit the save event with the task's ID and the payload
     emit("save", form.value.id, payload);
   } catch (error) {
     console.error("Error preparing task updates in modal:", error);
@@ -230,7 +260,6 @@ const handleSubmit = async () => {
 };
 
 onMounted(() => {
-  // Handles closing modal with Escape key
   const handleEscape = (e: KeyboardEvent) =>
     e.key === "Escape" && emit("cancel");
   document.addEventListener("keydown", handleEscape);

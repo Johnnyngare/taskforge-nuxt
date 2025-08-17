@@ -64,10 +64,10 @@
             class="w-full rounded-lg border border-slate-600 bg-slate-700 px-3 py-2 text-slate-200 transition-colors focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20"
             :disabled="submitting"
           >
-            <option value="Low">Low</option>
-            <option value="Medium">Medium</option>
-            <option value="High">High</option>
-            <option value="Urgent">Urgent</option>
+            <option :value="TaskPriority.Low">Low</option>
+            <option :value="TaskPriority.Medium">Medium</option>
+            <option :value="TaskPriority.High">High</option>
+            <option :value="TaskPriority.Urgent">Urgent</option>
           </select>
         </div>
         <div>
@@ -86,6 +86,31 @@
             :min="today"
           />
         </div>
+      </div>
+
+      <!-- New: Project Selector -->
+      <div>
+        <label
+          for="quick-project"
+          class="mb-1 block text-sm font-medium text-slate-300"
+        >
+          Assign to Project (optional)
+        </label>
+        <select
+          id="quick-project"
+          v-model="form.projectId"
+          class="w-full rounded-lg border border-slate-600 bg-slate-700 px-3 py-2 text-slate-200 transition-colors focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20"
+          :disabled="submitting || projectsPending"
+        >
+          <option :value="null">No Project</option>
+          <option v-if="projectsPending" disabled>Loading projects...</option>
+          <option v-for="p in projects" :key="p.id" :value="p.id">
+            {{ p.name }}
+          </option>
+        </select>
+        <p v-if="projectsError" class="mt-1 text-xs text-rose-400">
+          Error loading projects: {{ projectsError.message }}
+        </p>
       </div>
 
       <div class="flex flex-col-reverse gap-3 pt-2 sm:flex-row">
@@ -114,10 +139,12 @@
 <script setup lang="ts">
 import { ref, computed } from "vue";
 import { useTasks } from "~/composables/useTasks";
-// FIX: Import from the new shared types file
+import { useProjects } from "~/composables/useProjects"; // Import useProjects
 import { TaskPriority, TaskStatus, type ITask } from "~/types/task";
+import { useToast } from 'vue-toastification'; // Explicitly import useToast
 
 const { createTask } = useTasks();
+const { projects, pending: projectsPending, error: projectsError } = useProjects(); // Fetch projects
 const toast = useToast();
 
 const emit = defineEmits<{
@@ -132,6 +159,7 @@ interface QuickAddForm {
   description: string;
   priority: TaskPriority;
   dueDate: string;
+  projectId: string | null; // Add projectId
 }
 
 const form = ref<QuickAddForm>({
@@ -139,6 +167,7 @@ const form = ref<QuickAddForm>({
   description: "",
   priority: TaskPriority.Medium,
   dueDate: "",
+  projectId: null, // Initialize projectId
 });
 
 const today = computed(() => new Date().toISOString().split("T")[0]);
@@ -154,24 +183,35 @@ const submitTask = async () => {
       priority: form.value.priority,
       status: TaskStatus.Pending,
       dueDate: form.value.dueDate
-        ? new Date(`${form.value.dueDate}T00:00:00`).toISOString()
+        ? new Date(`${form.value.dueDate}T00:00:00Z`).toISOString() // Ensure ISO string with Z
         : undefined,
+      projectId: form.value.projectId || undefined, // Include projectId
     };
 
     await createTask(taskData);
     emit("task-created");
 
+    // Reset form fields
     form.value = {
       title: "",
       description: "",
       priority: TaskPriority.Medium,
       dueDate: "",
+      projectId: null, // Reset projectId
     };
 
-    emit("close");
+    toast.success({ // Use toast.success
+      title: "Task created!",
+      icon: "i-heroicons-check-circle",
+      color: "green",
+    });
+
+    // No need to emit 'close' here as handleTaskCreated will trigger refresh which closes it.
+    // It's already emitted by handleTaskCreated in Dashboard.vue
+    // emit("close"); // Remove this if handleTaskCreated handles it
   } catch (error: any) {
     console.error("Error creating task:", error);
-    toast.add({
+    toast.error({ // Use toast.error
       title: "Error creating task",
       description: error.data?.message || "An unexpected error occurred.",
       icon: "i-heroicons-exclamation-triangle",

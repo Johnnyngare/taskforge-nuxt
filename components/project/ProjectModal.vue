@@ -132,6 +132,23 @@
               :disabled="submitting"
             />
           </div>
+          <!-- New: Budget Input -->
+          <div>
+            <label
+              for="project-budget"
+              class="mb-2 block text-sm font-medium text-gray-700"
+            >
+              Budget (Optional)
+            </label>
+            <FormAppInput
+              id="project-budget"
+              v-model.number="form.budget"
+              type="number"
+              placeholder="e.g., 5000"
+              class="w-full"
+              :disabled="submitting"
+            />
+          </div>
         </div>
 
         <!-- Modal Footer -->
@@ -170,7 +187,6 @@ import { ref, computed, watch, onMounted, onUnmounted, type Ref } from "vue";
 import { useId } from '#app';
 import { type IProject, ProjectStatus, ProjectPriority } from "~/types/project";
 
-// Use useId for unique and accessible IDs
 const projectNameId = useId();
 const projectDescriptionId = useId();
 const projectStatusId = useId();
@@ -198,6 +214,7 @@ interface ProjectFormState {
   priority: ProjectPriority;
   startDate?: string | null;
   endDate?: string | null;
+  budget?: number | null;
 }
 
 const getInitialFormState = (): ProjectFormState => ({
@@ -207,6 +224,7 @@ const getInitialFormState = (): ProjectFormState => ({
   priority: ProjectPriority.Medium,
   startDate: null,
   endDate: null,
+  budget: null,
 });
 
 const form: Ref<ProjectFormState> = ref(getInitialFormState());
@@ -223,6 +241,7 @@ watch(
         priority: newProject.priority || ProjectPriority.Medium,
         startDate: newProject.startDate ? new Date(newProject.startDate).toISOString().split("T")[0] : null,
         endDate: newProject.endDate ? new Date(newProject.endDate).toISOString().split("T")[0] : null,
+        budget: newProject.budget || null,
       };
     } else {
       form.value = getInitialFormState();
@@ -232,6 +251,7 @@ watch(
 );
 
 const handleSubmit = async () => {
+   console.log('ProjectModal: handleSubmit triggered.');
   if (!form.value.name.trim() || submitting.value) {
     console.warn("ProjectModal: Form submission blocked due to empty name or already submitting.");
     return;
@@ -245,6 +265,7 @@ const handleSubmit = async () => {
       priority: form.value.priority,
       startDate: form.value.startDate ? new Date(`${form.value.startDate}T00:00:00Z`).toISOString() : undefined,
       endDate: form.value.endDate ? new Date(`${form.value.endDate}T00:00:00Z`).toISOString() : undefined,
+      budget: form.value.budget !== null ? form.value.budget : undefined,
     };
 
     Object.keys(payload).forEach((key) => {

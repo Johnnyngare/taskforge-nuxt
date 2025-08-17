@@ -47,7 +47,7 @@ function normalizeToastApi(toastInstance: any) {
 export const useNotifier = () => {
   let toastInstance: any = null;
 
-  // CRITICAL FIX: Only attempt to get/initialize the toast instance on the client-side
+  // Only attempt to get/initialize the toast instance on the client-side
   if (process.client) {
     try {
       toastInstance = useVueToast();

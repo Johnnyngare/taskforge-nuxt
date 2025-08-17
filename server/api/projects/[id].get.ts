@@ -1,5 +1,5 @@
 // server/api/projects/[id].get.ts
-import { defineEventHandler, getRouterParam, createError } from "h3";
+import { defineEventHandler, getRouterParam, createError } from '#imports'; // CHANGED: Imported from '#imports'
 import { projectStore } from "~/server/utils/projectStore";
 
 export default defineEventHandler(async (event) => {
@@ -46,7 +46,7 @@ export default defineEventHandler(async (event) => {
     console.error(`[API GET /projects/:id] Server error fetching project ${projectId}:`, error?.message || error);
     throw createError({
       statusCode: error.statusCode || 500,
-      statusStatusMessage: error.statusStatusMessage || "Failed to fetch project due to server error.",
+      statusMessage: error.statusMessage || "Failed to fetch project due to server error.",
       message: error.message,
     });
   }

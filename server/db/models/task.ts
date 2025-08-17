@@ -28,9 +28,9 @@ const taskSchema = new Schema<ITaskModel>(
       transform: (doc, ret: Record<string, any>): ITask => {
         ret.id = ret._id ? String(ret._id) : ret.id;
         delete ret._id;
-        if (ret.projectId && typeof ret.projectId === 'object') ret.projectId = String(ret.projectId);
-        if (ret.userId && typeof ret.userId === 'object') ret.userId = String(ret.userId);
-        if (ret.assignedTo && Array.isArray(ret.assignedTo)) ret.assignedTo = ret.assignedTo.map(String); // Changed from specific ObjectId check to Array.isArray
+        if (ret.projectId && mongoose.Types.ObjectId.isValid(ret.projectId)) ret.projectId = String(ret.projectId);
+        if (ret.userId && mongoose.Types.ObjectId.isValid(ret.userId)) ret.userId = String(ret.userId);
+        if (ret.assignedTo && Array.isArray(ret.assignedTo)) ret.assignedTo = ret.assignedTo.map((id: any) => String(id));
         delete ret.__v;
         return ret as ITask;
       },
@@ -39,12 +39,12 @@ const taskSchema = new Schema<ITaskModel>(
   }
 );
 
-// FIX: REMOVE ALL REDUNDANT taskSchema.index() CALLS HERE.
+// FIX: REMOVE REDUNDANT taskSchema.index() CALLS HERE.
 // The `index: true` on the field definitions is sufficient.
-// Example of what to remove if present:
+// The following lines were causing the duplicate index warnings:
 // taskSchema.index({ userId: 1 });
 // taskSchema.index({ projectId: 1 });
-// taskSchema.index({ status: 1 });
+// taskSchema.index({ status: 1 }); // If not inline, keep. But it is inline above.
 // taskSchema.index({ assignedTo: 1 });
 
 export const TaskModel = model<ITaskModel>('Task', taskSchema);

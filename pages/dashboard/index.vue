@@ -148,11 +148,11 @@ useSeoMeta({
 
 const { tasks, pending, error, refresh, updateTask, deleteTask } = useTasks();
 const { user: authUser } = useAuth();
-const toast = useToast(); // Initialize toast here
+const toast = useToast();
 
 onMounted(() => {
   console.log("Dashboard mounted. Calling useTasks.refresh().");
-  refresh(); // Initial fetch on mount
+  refresh();
 });
 
 const showQuickAdd: Ref<boolean> = ref(false);
@@ -190,7 +190,7 @@ const upcomingTasks = computed(() => {
 const handleTaskCreated = () => {
   showQuickAdd.value = false;
   refresh();
-  toast.success({ // Use toast.success
+  toast.success({
     title: "Task created!",
     icon: "i-heroicons-check-circle",
     color: "green",
@@ -200,14 +200,14 @@ const handleTaskCreated = () => {
 const handleTaskUpdate = async (taskId: string, updates: Partial<ITask>) => {
   try {
     await updateTask(taskId, updates);
-    refresh(); // Refresh tasks explicitly after an update to show changes
-    toast.success({ // Use toast.success
+    refresh();
+    toast.success({
       title: "Task updated!",
       icon: "i-heroicons-check-circle",
       color: "green",
     });
   } catch (err: unknown) {
-    toast.error({ // Use toast.error
+    toast.error({
       title: "Error updating task",
       description: (err as any).data?.message || "An unexpected error occurred.",
       icon: "i-heroicons-exclamation-triangle",
@@ -220,14 +220,14 @@ const handleTaskDelete = async (taskId: string) => {
   if (!confirm("Are you sure you want to delete this task?")) return;
   try {
     await deleteTask(taskId);
-    refresh(); // Refresh tasks explicitly after a delete to show changes
-    toast.info({ // Use toast.info (or toast.success, depending on desired visual)
+    refresh();
+    toast.info({
       title: "Task deleted!",
       icon: "i-heroicons-trash",
       color: "orange",
     });
   } catch (err: unknown) {
-    toast.error({ // Use toast.error
+    toast.error({
       title: "Error deleting task",
       description: (err as any).data?.message || "An unexpected error occurred.",
       icon: "i-heroicons-exclamation-triangle",
@@ -249,14 +249,14 @@ const handleSaveEdit = async (taskId: string, updatedData: Partial<ITask>) => {
   try {
     await updateTask(taskId, updatedData);
     editingTask.value = null;
-    refresh(); // Refresh tasks explicitly after saving edits
-    toast.success({ // Use toast.success
+    refresh();
+    toast.success({
       title: "Task saved!",
       icon: "i-heroicons-check-circle",
       color: "green",
     });
   } catch (err: unknown) {
-    toast.error({ // Use toast.error
+    toast.error({
       title: "Error saving task",
       description: (err as any).data?.message || "An unexpected error occurred.",
       icon: "i-heroicons-exclamation-triangle",

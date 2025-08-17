@@ -29,6 +29,7 @@
           <p><strong>Priority:</strong> {{ getPriorityLabel(project.priority) }}</p>
           <p v-if="project.startDate"><strong>Start Date:</strong> {{ new Date(project.startDate).toLocaleDateString() }}</p>
           <p v-if="project.endDate"><strong>End Date:</strong> {{ new Date(project.endDate).toLocaleDateString() }}</p>
+          <p v-if="project.budget"><strong>Budget:</strong> ${{ project.budget?.toLocaleString() }}</p>
           <p><strong>Created:</strong> {{ new Date(project.createdAt).toLocaleDateString() }}</p>
           <p><strong>Last Updated:</strong> {{ formatRelativeDate(project.updatedAt) }}</p>
           <p><strong>Owner ID:</strong> {{ project.owner }}</p>
@@ -68,7 +69,7 @@ import { createError } from 'h3';
 import type { IProject } from '~/types/project';
 import { ProjectStatus, ProjectPriority } from '~/types/project';
 import { useAuth } from '~/composables/useAuth';
-import { useNotifier } from '~/composables/useNotifier'; // FIXED: Changed '=>' to 'from'
+import { useNotifier } from '~/composables/useNotifier';
 
 definePageMeta({ layout: 'dashboard', middleware: '02-auth' });
 useSeoMeta({
@@ -118,7 +119,12 @@ const { data: project, pending, error, refresh } = await useAsyncData<IProject>(
     default: () => null,
     server: true,
     client: true,
-    watch: [projectId, user, initialized],
+    // CRITICAL FIX: Use a getter function in watch for reactive projectId
+    watch: [
+      () => projectId, // Watch for changes in the projectId parameter
+      () => user.value?.id, // Watch for changes in user.id
+      initialized // Watch initialized directly
+    ],
     immediate: true,
     lazy: false,
   }

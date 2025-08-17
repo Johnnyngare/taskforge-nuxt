@@ -133,6 +133,7 @@ const navigateToProject = (projectId: string) => {
 };
 
 const handleSaveProject = async (projectData: Partial<IProject>) => {
+  console.log('projects/index.vue: handleSaveProject received payload:', projectData);
   let response;
   try {
     if (editingProject.value) {

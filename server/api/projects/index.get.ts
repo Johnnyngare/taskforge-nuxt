@@ -1,10 +1,8 @@
 // server/api/projects/index.get.ts
-import { defineEventHandler, createError } from "h3";
-// IMPORTANT: You need to import your actual Project and Task models.
-// If your models are using Mongoose, you'll need `mongoose` for `Types.ObjectId`.
-import { ProjectModel } from "~/server/db/models/project";
-import { TaskModel } from "~/server/db/models/task"; // Assuming TaskModel for completion rate
-import mongoose from "mongoose";
+import { defineEventHandler, createError } from '#imports'; // CHANGED: Imported from '#imports'
+import { ProjectModel } from "~/server/db/models/project"; // Mongoose model (if used)
+import { TaskModel } from "~/server/db/models/task"; // TaskModel (if used)
+import mongoose from "mongoose"; // Mongoose (if used)
 import { projectStore } from "~/server/utils/projectStore";
 
 export default defineEventHandler(async (event) => {
