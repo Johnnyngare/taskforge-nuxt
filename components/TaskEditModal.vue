@@ -106,7 +106,7 @@
             />
           </div>
 
-          <!-- New: Project Selector for Editing -->
+          <!-- Project Selector for Editing -->
           <div>
             <label
               for="edit-task-project"
@@ -130,6 +130,41 @@
               Error loading projects: {{ projectsError.message }}
             </p>
           </div>
+
+          <!-- Cost Input (for Checklist Item 2) -->
+          <div>
+            <label
+              for="edit-task-cost"
+              class="mb-2 block text-sm font-medium text-slate-300"
+            >
+              Cost (Optional)
+            </label>
+            <FormAppInput
+              id="edit-task-cost"
+              v-model.number="form.cost"
+              type="number"
+              placeholder="e.g., 50.00"
+              class="w-full"
+              :disabled="submitting"
+              step="0.01"
+            />
+          </div>
+          
+          <!-- New: Assigned To (for Checklist Item 5) -->
+          <!-- This would typically be a multi-select for users -->
+          <!-- <div>
+            <label for="edit-task-assigned-to" class="mb-2 block text-sm font-medium text-slate-300">
+              Assign To (Optional)
+            </label>
+            <select
+              id="edit-task-assigned-to"
+              v-model="form.assignedTo"
+              class="w-full rounded-lg border border-slate-600 bg-slate-700 px-3 py-2 text-slate-200 transition-colors focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20"
+              :disabled="submitting"
+            >
+              <option :value="null">Unassigned</option>
+            </select>
+          </div> -->
         </div>
 
         <div
@@ -159,7 +194,7 @@
 import { ref, watch, onMounted, onUnmounted } from "vue";
 import { useId } from '#app';
 import { TaskPriority, TaskStatus, type ITask } from "~/types/task";
-import { useProjects } from "~/composables/useProjects"; // Import useProjects
+import { useProjects } from "~/composables/useProjects";
 
 const titleId = useId();
 const descriptionId = useId();
@@ -168,7 +203,7 @@ const priorityId = useId();
 const dueDateId = useId();
 
 const props = defineProps<{
-  task: ITask; // The task object passed to the modal
+  task: ITask;
 }>();
 
 const emit = defineEmits<{
@@ -177,17 +212,18 @@ const emit = defineEmits<{
 }>();
 
 const submitting = ref(false);
-const { projects, pending: projectsPending, error: projectsError } = useProjects(); // Fetch projects
+const { projects, pending: projectsPending, error: projectsError } = useProjects();
 
 interface EditForm {
-  id: string; // The ID of the task being edited
+  id: string;
   title: string;
   description?: string | null;
   status: TaskStatus;
   priority: TaskPriority;
   dueDate?: string | null;
-  projectId?: string | null; // Add projectId
-  assignedTo?: string[]; // Add assignedTo for consistency, even if not edited here
+  projectId?: string | null;
+  cost?: number | null;
+  assignedTo?: string[];
 }
 
 const form = ref<EditForm>({
@@ -197,11 +233,11 @@ const form = ref<EditForm>({
   status: TaskStatus.Pending,
   priority: TaskPriority.Medium,
   dueDate: null,
-  projectId: null, // Initialize projectId
-  assignedTo: [], // Initialize assignedTo
+  projectId: null,
+  cost: null,
+  assignedTo: [],
 });
 
-// Watch the prop.task and initialize the form reactive data
 watch(
   () => props.task,
   (newTask) => {
@@ -213,10 +249,11 @@ watch(
         status: newTask.status || TaskStatus.Pending,
         priority: newTask.priority || TaskPriority.Medium,
         dueDate: newTask.dueDate
-          ? new Date(newTask.dueDate).toISOString().split("T")[0] // Format for date input (YYYY-MM-DD)
+          ? new Date(newTask.dueDate).toISOString().split("T")[0]
           : null,
-        projectId: newTask.projectId || null, // Hydrate projectId
-        assignedTo: newTask.assignedTo || [], // Hydrate assignedTo
+        projectId: newTask.projectId || null,
+        cost: newTask.cost || null,
+        assignedTo: newTask.assignedTo || [],
       };
     }
   },
@@ -236,13 +273,13 @@ const handleSubmit = async () => {
       status: form.value.status,
       priority: form.value.priority,
       dueDate: form.value.dueDate
-        ? new Date(`${form.value.dueDate}T00:00:00Z`).toISOString() // Convert to ISO string with time
+        ? new Date(`${form.value.dueDate}T00:00:00Z`).toISOString()
         : undefined,
-      projectId: form.value.projectId || undefined, // Include projectId
+      projectId: form.value.projectId || undefined,
+      cost: form.value.cost !== null ? form.value.cost : undefined,
       // assignedTo: form.value.assignedTo, // Include assignedTo if editable
     };
 
-    // Clean up undefined values from payload for PATCH request
     Object.keys(payload).forEach((key) => {
       // @ts-ignore
       if (payload[key] === undefined) {

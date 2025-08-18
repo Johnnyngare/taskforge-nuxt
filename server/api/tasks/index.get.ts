@@ -7,16 +7,10 @@ import { ProjectModel } from "~/server/db/models/project";
 import type { ITask } from "~/types/task";
 
 export default defineEventHandler(async (event) => {
-  // CRITICAL FIX: Robustly access ctxUser.
-  // Although middleware sets it, in async/SSR scenarios, it can sometimes appear undefined
-  // if accessed too early or if the request is subtly different.
   const ctxUser: { id: string; role: string; name?: string; email?: string } | undefined = event.context?.user;
   console.log(`[API GET /tasks] --- START Processing Request --- URL: ${event.node?.req?.url}`);
   console.log("[API GET /tasks] User Context on entry (from middleware):", ctxUser ? { id: ctxUser.id, role: ctxUser.role, name: ctxUser.name } : "Not set (or null)");
 
-
-  // 1. Authentication Check (now relies on middleware having fully authenticated)
-  // This check MUST be reliable.
   if (!ctxUser || !ctxUser.id || !ctxUser.role) {
     console.warn("[API GET /tasks] Unauthorized attempt to fetch tasks. No complete user context. ctxUser:", ctxUser);
     throw createError({
@@ -31,9 +25,8 @@ export default defineEventHandler(async (event) => {
 
   const query = getQuery(event) as Record<string, any>;
   let filter: Record<string, any> = {};
-  const andConditions: Record<string, any>[] = [];
+  let andConditions: Record<string, any>[] = [];
 
-  // Add task status filter if present
   if (query.status) {
     andConditions.push({ status: query.status });
   }
@@ -42,59 +35,61 @@ export default defineEventHandler(async (event) => {
   if (role === "admin") {
     console.log("[API GET /tasks] Admin fetching all tasks (no additional RBAC filter applied).");
   } else {
-    // Non-admins: Filter based on ownership or project membership/management
-    const accessibleProjectIds: mongoose.Types.ObjectId[] = [];
+    // Collect all project ObjectIds that the user has access to
+    const accessibleProjectObjectIds: mongoose.Types.ObjectId[] = [];
 
     const [ownedProjects, memberProjects] = await Promise.all([
       ProjectModel.find({ owner: userId }).select('_id').lean(),
       ProjectModel.find({ members: userId }).select('_id').lean()
     ]);
-    accessibleProjectIds.push(...ownedProjects.map(p => p._id));
-    accessibleProjectIds.push(...memberProjects.map(p => p._id));
+    accessibleProjectObjectIds.push(...ownedProjects.map(p => p._id));
+    accessibleProjectObjectIds.push(...memberProjects.map(p => p._id));
 
-    if (role === "manager") { // Assuming 'manager' role for TeamManager
+    if (role === "manager") {
       const managerDoc = await UserModel.findById(userId).select('managedProjects').lean();
       if (managerDoc?.managedProjects) {
-        accessibleProjectIds.push(...managerDoc.managedProjects.map(id => new mongoose.Types.ObjectId(id)));
+        accessibleProjectObjectIds.push(...managerDoc.managedProjects.map(id => new mongoose.Types.ObjectId(id)));
       }
     }
     
-    const uniqueAccessibleProjectIds = [...new Set(accessibleProjectIds.filter(id => id && mongoose.Types.ObjectId.isValid(id)))];
-    console.log(`[API GET /tasks] User ${userId} (${role}) has access to projects: ${uniqueAccessibleProjectIds.length} unique IDs.`);
+    // Ensure uniqueness for ObjectIds
+    const uniqueAccessibleProjectObjectIds = [...new Set(accessibleProjectObjectIds.filter(id => id && mongoose.Types.ObjectId.isValid(id)))];
+    console.log(`[API GET /tasks] User ${userId} (${role}) has access to ${uniqueAccessibleProjectObjectIds.length} unique projects.`);
 
+    // CRITICAL FIX: Build $or condition for filtering tasks
     andConditions.push({
       $or: [
-        { userId: userId }, // Task is owned by user
-        { assignedTo: userId }, // Task is assigned to user
-        { projectId: { $in: uniqueAccessibleProjectIds } } // Task belongs to an accessible project
+        { userId: userId }, // Task is owned by user (ObjectId)
+        { assignedTo: userId }, // Task is assigned to user (ObjectId)
+        // Task belongs to an accessible project (projectId is ObjectId)
+        { projectId: { $in: uniqueAccessibleProjectObjectIds } } 
       ],
     });
   }
 
-  // 2. Project ID Filter (from query param)
+  // 2. Project ID Filter (from query param) - if provided, refine the filter further
   if (query.projectId) {
     if (!mongoose.Types.ObjectId.isValid(query.projectId)) {
       console.warn(`[API GET /tasks] Invalid Project ID format in query: ${query.projectId}`);
       throw createError({ statusCode: 400, message: "Invalid Project ID format." });
     }
-    const queryProjectId = new mongoose.Types.ObjectId(query.projectId);
+    const queryProjectId = new mongoose.Types.ObjectId(query.projectId); // Convert to ObjectId for query
     andConditions.push({ projectId: queryProjectId });
   }
   console.log(`[API GET /tasks] Filter conditions before final build: ${andConditions.length} conditions`);
 
-
-  // Combine all conditions
   if (andConditions.length > 0) {
     filter = andConditions.length === 1 ? andConditions[0] : { $and: andConditions };
   }
   console.log("[API GET /tasks] Final MongoDB filter:", JSON.stringify(filter));
 
-
-  // 3. Query DB
   try {
+    // Populate projectId field to get project name for frontend display
+    // This relies on `TaskModel.projectId` being `mongoose.Types.ObjectId` with `ref: 'Project'`
     const tasks = await TaskModel.find(filter)
       .sort({ createdAt: -1 })
-      .lean();
+      .populate('projectId', 'name') // Populate projectId and select only 'name'
+      .lean(); // Use lean() AFTER populate()
 
     const transformedTasks: ITask[] = tasks.map(task => {
         const plainTask: ITask = {
@@ -104,12 +99,33 @@ export default defineEventHandler(async (event) => {
             status: task.status,
             priority: task.priority,
             dueDate: task.dueDate ? new Date(task.dueDate).toISOString() : undefined,
-            projectId: task.projectId ? String(task.projectId) : undefined,
             createdAt: task.createdAt.toISOString(),
             updatedAt: task.updatedAt.toISOString(),
             userId: String(task.userId),
             assignedTo: task.assignedTo ? task.assignedTo.map(String) : [],
+            cost: task.cost,
         };
+        
+        // Handle projectId (it should be an ObjectId by now, possibly populated)
+        if (task.projectId) {
+          if (typeof task.projectId === 'object' && (task.projectId as any).name) {
+              plainTask.projectId = String((task.projectId as any)._id);
+              plainTask.project = {
+                  id: String((task.projectId as any)._id),
+                  name: (task.projectId as any).name,
+              };
+          } else if (mongoose.Types.ObjectId.isValid(task.projectId)) {
+              plainTask.projectId = String(task.projectId);
+              plainTask.project = undefined;
+          } else { // Fallback if projectId is not valid ObjectId string (shouldn't happen with proper DB)
+              plainTask.projectId = undefined;
+              plainTask.project = undefined;
+          }
+        } else {
+            plainTask.projectId = undefined;
+            plainTask.project = undefined;
+        }
+
         return plainTask;
     });
 

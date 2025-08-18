@@ -1,4 +1,3 @@
-<!-- pages/dashboard/index.vue -->
 <template>
   <div>
     <!-- Welcome Banner -->
@@ -53,6 +52,7 @@
 
           <div v-if="pending" class="flex justify-center py-8">
             <UiSpinner class="h-6 w-6 text-emerald-500" />
+            <p class="ml-2 text-emerald-500">Loading tasks...</p>
           </div>
 
           <div v-else-if="error" class="py-8 text-center">
@@ -130,11 +130,12 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, type Ref, onMounted } from "vue";
+import { ref, computed, type Ref, watch } from "vue";
 import { useTasks } from "~/composables/useTasks";
 import { useAuth } from "~/composables/useAuth";
 import { type ITask, TaskStatus } from "~/types/task";
-import { useToast } from 'vue-toastification'; // Explicitly import useToast
+import { useToast } from 'vue-toastification';
+import { useCookie } from '#app';
 
 definePageMeta({
   layout: "dashboard",
@@ -147,13 +148,25 @@ useSeoMeta({
 });
 
 const { tasks, pending, error, refresh, updateTask, deleteTask } = useTasks();
-const { user: authUser } = useAuth();
+const { user: authUser, isAuthenticated, initialized } = useAuth();
 const toast = useToast();
 
-onMounted(() => {
-  console.log("Dashboard mounted. Calling useTasks.refresh().");
-  refresh();
-});
+const authTokenCookie = useCookie('auth_token');
+
+// CRITICAL FIX: Ensure refresh() is called ONLY when auth is fully stable.
+watch([isAuthenticated, initialized, () => authUser.value?.id, authTokenCookie], ([isAuth, isInit, userId, token]) => {
+  if (isInit && isAuth && userId && token) {
+    if (!tasks.value.length && !pending.value || error.value) {
+        setTimeout(() => {
+            console.log("Dashboard: Auth state and cookie are fully ready, calling useTasks.refresh().");
+            refresh();
+        }, 200); // Small delay, to ensure cookie is sent reliably for the concurrent API call.
+    }
+  } else if (isInit && !isAuth && !token) {
+    console.log("Dashboard: Auth state initialized but unauthenticated (no token). Not fetching tasks.");
+  }
+}, { immediate: true });
+
 
 const showQuickAdd: Ref<boolean> = ref(false);
 const editingTask: Ref<ITask | null> = ref(null);
@@ -189,30 +202,19 @@ const upcomingTasks = computed(() => {
 
 const handleTaskCreated = () => {
   showQuickAdd.value = false;
-  refresh();
-  toast.success({
-    title: "Task created!",
-    icon: "i-heroicons-check-circle",
-    color: "green",
-  });
+  refresh(); // Refresh useTasks data after creating a task
+  toast.success("Task created successfully!"); // CHANGED: Simple string message
 };
 
 const handleTaskUpdate = async (taskId: string, updates: Partial<ITask>) => {
   try {
     await updateTask(taskId, updates);
     refresh();
-    toast.success({
-      title: "Task updated!",
-      icon: "i-heroicons-check-circle",
-      color: "green",
-    });
+    toast.success("Task updated!"); // CHANGED: Simple string message
   } catch (err: unknown) {
-    toast.error({
-      title: "Error updating task",
-      description: (err as any).data?.message || "An unexpected error occurred.",
-      icon: "i-heroicons-exclamation-triangle",
-      color: "red",
-    });
+    // Access message from error.data.message as per your backend structure
+    const errorMessage = (err as any).data?.message || "An unexpected error occurred.";
+    toast.error(`Error updating task: ${errorMessage}`); // CHANGED: Simple string message
   }
 };
 
@@ -221,18 +223,10 @@ const handleTaskDelete = async (taskId: string) => {
   try {
     await deleteTask(taskId);
     refresh();
-    toast.info({
-      title: "Task deleted!",
-      icon: "i-heroicons-trash",
-      color: "orange",
-    });
+    toast.info("Task deleted!"); // CHANGED: Simple string message
   } catch (err: unknown) {
-    toast.error({
-      title: "Error deleting task",
-      description: (err as any).data?.message || "An unexpected error occurred.",
-      icon: "i-heroicons-exclamation-triangle",
-      color: "red",
-    });
+    const errorMessage = (err as any).data?.message || "An unexpected error occurred.";
+    toast.error(`Error deleting task: ${errorMessage}`); // CHANGED: Simple string message
   }
 };
 
@@ -250,18 +244,10 @@ const handleSaveEdit = async (taskId: string, updatedData: Partial<ITask>) => {
     await updateTask(taskId, updatedData);
     editingTask.value = null;
     refresh();
-    toast.success({
-      title: "Task saved!",
-      icon: "i-heroicons-check-circle",
-      color: "green",
-    });
+    toast.success("Task saved!"); // CHANGED: Simple string message
   } catch (err: unknown) {
-    toast.error({
-      title: "Error saving task",
-      description: (err as any).data?.message || "An unexpected error occurred.",
-      icon: "i-heroicons-exclamation-triangle",
-      color: "red",
-    });
+    const errorMessage = (err as any).data?.message || "An unexpected error occurred.";
+    toast.error(`Error saving task: ${errorMessage}`); // CHANGED: Simple string message
   }
 };
 

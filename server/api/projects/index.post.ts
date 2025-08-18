@@ -1,7 +1,8 @@
 // server/api/projects/index.post.ts
-import { defineEventHandler, readBody, createError, setResponseStatus } from '#imports'; // CHANGED: Imported from '#imports'
-import { projectStore, type Project } from "~/server/utils/projectStore";
+import { defineEventHandler, readBody, createError, setResponseStatus } from '#imports';
 import { z } from "zod";
+import mongoose from "mongoose"; // Import mongoose to use ObjectId
+import { ProjectModel } from "~/server/db/models/project"; // Import your Mongoose ProjectModel
 import { ProjectStatus, ProjectPriority } from "~/types/project";
 
 // Define a Zod schema for project creation payload
@@ -13,7 +14,8 @@ const createProjectSchema = z.object({
   startDate: z.string().datetime({ message: "Invalid startDate format (ISO string required)." }).optional().nullable(),
   endDate: z.string().datetime({ message: "Invalid endDate format (ISO string required)." }).optional().nullable(),
   budget: z.number().min(0, "Budget cannot be negative.").optional().nullable(),
-  members: z.array(z.string().min(1, "Member ID cannot be empty.")).optional(),
+  // Ensure members are validated as valid ObjectIds (if frontend sends them)
+  members: z.array(z.string().refine(val => mongoose.Types.ObjectId.isValid(val), "Invalid member ID format.")).optional(),
 });
 
 export default defineEventHandler(async (event) => {
@@ -26,16 +28,16 @@ export default defineEventHandler(async (event) => {
   if (!ctxUser || !ctxUser.id) {
     console.warn("[API POST /projects] Unauthorized attempt to create project. No user context.");
     setResponseStatus(event, 401);
-    return createError({ statusCode: 401, message: "Unauthorized: User not authenticated." });
+    throw createError({ statusCode: 401, message: "Unauthorized: User not authenticated." });
   }
 
   const userRole = ctxUser.role;
-  const userId = ctxUser.id;
+  const userId = new mongoose.Types.ObjectId(ctxUser.id); // Convert userId to ObjectId
 
   if (userRole !== 'admin' && userRole !== 'manager' && userRole !== 'dispatcher') {
     console.warn(`[API POST /projects] Forbidden: User ${userId} (role: ${userRole}) lacks permission.`);
     setResponseStatus(event, 403);
-    return createError({ statusCode: 403, message: `Forbidden: Your role (${userRole}) does not permit project creation.` });
+    throw createError({ statusCode: 403, message: `Forbidden: Your role (${userRole}) does not permit project creation.` });
   }
   console.log("[API POST /projects] 3. User authorized for creation based on role.");
 
@@ -54,49 +56,50 @@ export default defineEventHandler(async (event) => {
     const validatedData = createProjectSchema.parse(rawBody);
     console.log("[API POST /projects] 6. Zod validation passed. ValidatedData:", JSON.stringify(validatedData));
 
-    const newProjectData: Omit<Project, 'id' | 'createdAt' | 'updatedAt' | 'completedTasks' | 'totalTasks' | 'completionRate'> & { budget?: number | null } = {
+    // Prepare data for Mongoose, converting string IDs to ObjectIDs
+    const projectDataToCreate = {
       name: validatedData.name,
       description: validatedData.description || null,
       status: validatedData.status,
       priority: validatedData.priority,
-      startDate: validatedData.startDate || null,
-      endDate: validatedData.endDate || null,
-      budget: validatedData.budget !== undefined ? validatedData.budget : null,
-      owner: userId,
+      startDate: validatedData.startDate ? new Date(validatedData.startDate) : null,
+      endDate: validatedData.endDate ? new Date(validatedData.endDate) : null,
+      budget: validatedData.budget !== undefined && validatedData.budget !== null ? validatedData.budget : 0, // Default budget to 0 if null/undefined
+      owner: userId, // Owner is already ObjectId
       members: validatedData.members && validatedData.members.length > 0
-               ? validatedData.members
-               : [userId],
+               ? validatedData.members.map(id => new mongoose.Types.ObjectId(id))
+               : [userId], // Ensure members are ObjectIds
     };
-    console.log("[API POST /projects] 7. Prepared newProjectData for store:", JSON.stringify(newProjectData));
+    console.log("[API POST /projects] 7. Prepared projectDataToCreate for Mongoose:", JSON.stringify(projectDataToCreate));
 
-    console.log("[API POST /projects] 8. Attempting to add project to store (projectStore.addProject)...");
-    let createdProject: Project;
+    console.log("[API POST /projects] 8. Attempting to create project in MongoDB...");
+    let createdProjectDoc;
     try {
-        createdProject = projectStore.addProject(newProjectData);
-        console.log("[API POST /projects] 9. Project successfully added to store. ID:", createdProject.id);
-    } catch (storeError: any) {
-        console.error("[API POST /projects] CRITICAL ERROR: Failed to add project to store. Error details:", storeError);
-        console.error("[API POST /projects] CRITICAL ERROR: Stack trace:", storeError.stack);
+        createdProjectDoc = await ProjectModel.create(projectDataToCreate); // *** KEY CHANGE: Use Mongoose Model ***
+        console.log("[API POST /projects] 9. Project successfully created in DB. ID:", createdProjectDoc._id);
+    } catch (dbError: any) {
+        console.error("[API POST /projects] CRITICAL ERROR: Failed to create project in DB. Error details:", dbError);
         setResponseStatus(event, 500);
         throw createError({
             statusCode: 500,
-            message: "Failed to save project to internal store.",
-            cause: storeError,
-            data: { message: storeError.message, stack: storeError.stack }
+            message: "Failed to save project to database.",
+            cause: dbError,
+            data: { message: dbError.message, stack: dbError.stack }
         });
     }
+
+    // Use .toJSON() to apply the transform that converts _id to id and ObjectIds to strings
+    const createdProject = createdProjectDoc.toJSON();
 
     console.log("[API POST /projects] --- END Request Processing (Success) ---");
     setResponseStatus(event, 201);
     return {
       statusCode: 201,
       message: "Project created successfully!",
-      project: createdProject,
+      project: createdProject, // Return the transformed object
     };
   } catch (error: any) {
     console.error("[API POST /projects] CRITICAL ERROR: Unhandled exception in main try block:", error);
-    console.error("[API POST /projects] CRITICAL ERROR: Stack trace (from main catch):", error.stack);
-
     let errorMessage = "An unexpected server error occurred.";
     let statusCode = 500;
     let errorData: any = null;
@@ -105,11 +108,11 @@ export default defineEventHandler(async (event) => {
       statusCode = 400;
       errorMessage = "Validation failed for project data.";
       errorData = error.flatten().fieldErrors;
-    } else if (error.statusCode) {
+    } else if (error.statusCode) { // H3Error
       statusCode = error.statusCode;
       errorMessage = error.message;
       errorData = error.data;
-    } else {
+    } else { // Generic Error
       errorMessage = error.message || errorMessage;
       errorData = error.stack;
     }

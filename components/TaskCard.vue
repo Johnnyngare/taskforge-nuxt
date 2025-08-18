@@ -78,6 +78,22 @@
         ></span>
         {{ statusLabel }}
       </span>
+      <!-- NEW: Display Project Name -->
+      <span
+        v-if="task.project"
+        class="inline-flex items-center rounded-full bg-blue-500/10 px-2 py-1 text-xs font-medium text-blue-400"
+      >
+        <Icon name="heroicons:folder" class="mr-1.5 h-3 w-3" />
+        {{ task.project.name }}
+      </span>
+      <!-- NEW: Display Task Cost -->
+      <span
+        v-if="typeof task.cost === 'number'"
+        class="inline-flex items-center rounded-full bg-purple-500/10 px-2 py-1 text-xs font-medium text-purple-400"
+      >
+        <Icon name="heroicons:currency-dollar" class="mr-1.5 h-3 w-3" />
+        {{ task.cost.toLocaleString() }}
+      </span>
     </div>
 
     <div class="flex items-center justify-between text-sm">
@@ -172,13 +188,13 @@ const dueDateClasses = computed(() => {
 const toggleDropdown = () => (showDropdown.value = !showDropdown.value);
 
 const handleEdit = () => {
-  console.log("TaskCard: Emitting 'edit' for task ID:", props.task.id); // Add log
+  console.log("TaskCard: Emitting 'edit' for task ID:", props.task.id);
   emit("edit", props.task.id);
   showDropdown.value = false;
 };
 
 const handleDelete = () => {
-  console.log("TaskCard: Emitting 'delete' for task ID:", props.task.id); // Add log
+  console.log("TaskCard: Emitting 'delete' for task ID:", props.task.id);
   emit("delete", props.task.id);
   showDropdown.value = false;
 };
@@ -188,7 +204,7 @@ const handleStatusToggle = () => {
     props.task.status === TaskStatus.Completed
       ? TaskStatus.Pending
       : TaskStatus.Completed;
-  console.log("TaskCard: Emitting 'status-changed' for task ID:", props.task.id, "new status:", newStatus); // Add log
+  console.log("TaskCard: Emitting 'status-changed' for task ID:", props.task.id, "new status:", newStatus);
   emit("status-changed", props.task.id, { status: newStatus });
   showDropdown.value = false;
 };

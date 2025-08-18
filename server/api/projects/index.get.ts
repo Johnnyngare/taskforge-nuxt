@@ -1,12 +1,14 @@
 // server/api/projects/index.get.ts
-import { defineEventHandler, createError } from '#imports'; // CHANGED: Imported from '#imports'
-import { ProjectModel } from "~/server/db/models/project"; // Mongoose model (if used)
-import { TaskModel } from "~/server/db/models/task"; // TaskModel (if used)
-import mongoose from "mongoose"; // Mongoose (if used)
-import { projectStore } from "~/server/utils/projectStore";
+import { defineEventHandler, createError } from '#imports';
+import { ProjectModel } from "~/server/db/models/project";
+import { TaskModel } from "~/server/db/models/task";
+import { UserModel } from "~/server/db/models/user";
+import mongoose from "mongoose";
+import { UserRole } from "~/types/user";
 
 export default defineEventHandler(async (event) => {
   const ctxUser: { id: string; role: string; name?: string; email?: string } | undefined = event.context?.user;
+  console.log("[API GET /projects] --- START Processing Request ---");
 
   if (!ctxUser || !ctxUser.id || !ctxUser.role) {
     console.warn("[API GET /projects] Unauthorized attempt to fetch projects. No complete user context.");
@@ -17,44 +19,59 @@ export default defineEventHandler(async (event) => {
   }
 
   const userRole = ctxUser.role;
-  const userId = ctxUser.id;
+  const userId = new mongoose.Types.ObjectId(ctxUser.id);
 
   try {
-    const projects = projectStore.getProjects(userId, userRole);
-
-    // --- Mongoose/Database Example ---
-    /*
     let filter: Record<string, any> = {};
-    if (userRole !== "admin") {
-      filter.$or = [
-        { owner: new mongoose.Types.ObjectId(userId) },
-        { members: new mongoose.Types.ObjectId(userId) }
+
+    // RBAC filter for fetching projects
+    if (userRole === UserRole.Admin) {
+      console.log("[API GET /projects] Admin fetching all projects.");
+    } else {
+      let orConditions: mongoose.FilterQuery<any>[] = [
+        { owner: userId },
+        { members: userId }
       ];
+
+      if (userRole === UserRole.TeamManager) {
+        const managerDoc = await UserModel.findById(userId).select('managedProjects').lean();
+        if (managerDoc?.managedProjects && managerDoc.managedProjects.length > 0) {
+          orConditions.push({ _id: { $in: managerDoc.managedProjects } });
+          console.log(`[API GET /projects] TeamManager ${userId} has ${managerDoc.managedProjects.length} managed projects.`);
+        }
+      }
+      filter.$or = orConditions;
+      console.log(`[API GET /projects] Filtering projects for user ${userId} (role: ${userRole}). Filter: ${JSON.stringify(filter)}`);
     }
-    const projects = await ProjectModel.find(filter).lean();
-    */
+
+    // Removed .lean() so projectDocs are full Mongoose documents
+    const projectDocs = await ProjectModel.find(filter)
+      .sort({ createdAt: -1 });
 
     const projectsWithCompletion = await Promise.all(
-      projects.map(async (project) => {
-        const projectIdForTasks = project.id;
-        
-        let totalTasks = 0;
-        let completedTasks = 0;
+      projectDocs.map(async (projectDoc) => {
+        const projectIdForTasks = projectDoc._id;
 
-        /*
-        try {
-          const [dbTotalTasks, dbCompletedTasks] = await Promise.all([
-            TaskModel.countDocuments({ projectId: new mongoose.Types.ObjectId(projectIdForTasks) }),
-            TaskModel.countDocuments({ projectId: new mongoose.Types.ObjectId(projectIdForTasks), status: "completed" }),
-          ]);
-          totalTasks = dbTotalTasks;
-          completedTasks = dbCompletedTasks;
-        } catch (taskErr) {
-          console.warn(`[API GET /projects] Failed to count tasks for project ${projectIdForTasks}:`, (taskErr as Error).message);
-        }
-        */
+        // Aggregate total and completed tasks for this project
+        const taskStats = await TaskModel.aggregate([
+          { $match: { projectId: projectIdForTasks } },
+          {
+            $group: {
+              _id: null,
+              totalTasks: { $sum: 1 },
+              completedTasks: {
+                $sum: { $cond: [{ $eq: ["$status", "completed"] }, 1, 0] },
+              },
+            },
+          },
+        ]);
 
+        const totalTasks = taskStats.length > 0 ? taskStats[0].totalTasks : 0;
+        const completedTasks = taskStats.length > 0 ? taskStats[0].completedTasks : 0;
         const completionRate = totalTasks > 0 ? (completedTasks / totalTasks) * 100 : 0;
+
+        // Calls the .toJSON() method defined in your Mongoose schema
+        const project = projectDoc.toJSON();
 
         return {
           ...project,
@@ -72,11 +89,16 @@ export default defineEventHandler(async (event) => {
       projects: projectsWithCompletion,
     };
   } catch (error: any) {
+    if (error.statusCode) {
+      throw error;
+    }
     console.error("[API GET /projects] Server error fetching projects:", error?.message || error);
     throw createError({
-      statusCode: error.statusCode || 500,
-      statusMessage: error.statusMessage || "Failed to fetch projects due to server error.",
+      statusCode: 500,
+      statusMessage: error.message || "Failed to fetch projects due to server error.",
       message: error.message,
     });
+  } finally {
+    console.log("[API GET /projects] --- END Request Processing ---");
   }
 });

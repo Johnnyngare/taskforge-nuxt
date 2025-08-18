@@ -1,12 +1,12 @@
 // server/api/tasks/index.post.ts
-import { defineEventHandler, readBody, setResponseStatus, createError } from "h3";
+import { defineEventHandler, readBody, setResponseStatus, createError } from '#imports';
 import { z } from "zod";
 import mongoose from "mongoose";
 
 import { TaskPriority, TaskStatus } from "~/types/task";
 import { TaskModel } from "~/server/db/models/task";
-import { ProjectModel } from "~/server/db/models/project"; // Import ProjectModel
-import { UserModel } from "~/server/db/models/user"; // Import UserModel for RBAC
+import { ProjectModel } from "~/server/db/models/project";
+import { UserModel } from "~/server/db/models/user";
 
 const getEnumValues = <T extends Record<string, string>>(
   enumObject: T
@@ -18,7 +18,7 @@ const getEnumValues = <T extends Record<string, string>>(
 const createTaskSchema = z.object({
   title: z.string().min(1, "Title is required"),
   description: z.string().optional().nullable(),
-  projectId: z.string().optional().nullable(), // Allow projectId as string
+  projectId: z.string().optional().nullable(), // Frontend sends string ID
   priority: z.enum(getEnumValues(TaskPriority)).default(TaskPriority.Medium),
   status: z.enum(getEnumValues(TaskStatus)).default(TaskStatus.Pending),
   dueDate: z
@@ -26,12 +26,15 @@ const createTaskSchema = z.object({
     .datetime({ message: "Invalid date format" })
     .optional()
     .nullable(),
-  assignedTo: z.array(z.string()).optional(), // Allow assignedTo as array of strings
+  assignedTo: z.array(z.string()).optional(),
+  cost: z.number().min(0, "Cost cannot be negative.").optional().nullable(),
 });
 
 export default defineEventHandler(async (event) => {
-  const ctxUser = event.context?.user;
+  console.log("[API POST /tasks] --- START Request Processing ---");
+  const ctxUser: { id: string; role: string; name?: string; email?: string } | undefined = event.context?.user;
   if (!ctxUser?.id) {
+    console.warn("[API POST /tasks] Unauthorized: No user context found.");
     throw createError({
       statusCode: 401,
       message: "Unauthorized: User not authenticated.",
@@ -41,35 +44,37 @@ export default defineEventHandler(async (event) => {
   const userId = new mongoose.Types.ObjectId(ctxUser.id);
   const role = ctxUser.role;
 
-  const body = await readBody(event);
+  let rawBody: any;
+  try {
+    rawBody = await readBody(event);
+    console.log("[API POST /tasks] Raw request body:", rawBody);
+  } catch (readBodyError) {
+    console.error("[API POST /tasks] Error reading request body:", readBodyError);
+    throw createError({ statusCode: 400, message: "Invalid request body format." });
+  }
 
   try {
-    const validatedData = createTaskSchema.parse(body);
+    const validatedData = createTaskSchema.parse(rawBody);
 
-    let targetProjectId: mongoose.Types.ObjectId | undefined;
-    // 1. Validate and authorize projectId if provided
+    let targetProjectId: mongoose.Types.ObjectId | undefined; // CRITICAL: Target type is ObjectId
     if (validatedData.projectId) {
       if (!mongoose.Types.ObjectId.isValid(validatedData.projectId)) {
         throw createError({ statusCode: 400, message: "Invalid Project ID format." });
       }
-      targetProjectId = new mongoose.Types.ObjectId(validatedData.projectId);
+      targetProjectId = new mongoose.Types.ObjectId(validatedData.projectId); // Convert string to ObjectId
 
       // RBAC: User can only create tasks for projects they own/manage/are members of (if not Admin)
       if (role !== "admin") {
         const project = await ProjectModel.findById(targetProjectId).select('owner members').lean();
-        if (!project) {
-          throw createError({ statusCode: 404, message: "Project not found." });
-        }
+        if (!project) { throw createError({ statusCode: 404, message: "Project not found." }); }
 
         let hasProjectAccess = false;
-        if (String(project.owner) === String(userId)) hasProjectAccess = true; // Project owner
-        if (project.members.map(String).includes(String(userId))) hasProjectAccess = true; // Project member
+        if (String(project.owner) === String(userId)) hasProjectAccess = true;
+        if (project.members.map(String).includes(String(userId))) hasProjectAccess = true;
 
-        if (!hasProjectAccess && role === "manager") { // Check if manager can create tasks in managed projects
+        if (!hasProjectAccess && role === "manager") {
             const managerDoc = await UserModel.findById(userId).select('managedProjects').lean();
-            if (managerDoc?.managedProjects?.map(String).includes(String(targetProjectId))) {
-                hasProjectAccess = true;
-            }
+            if (managerDoc?.managedProjects?.map(String).includes(String(targetProjectId))) { hasProjectAccess = true; }
         }
         if (!hasProjectAccess) {
           console.warn(`Attempted unauthorized task creation in project ${validatedData.projectId}: User ${userId} (Role: ${role})`);
@@ -78,28 +83,24 @@ export default defineEventHandler(async (event) => {
       }
     }
 
-    // 2. Validate and convert assignedTo (if provided)
     let assignedToUserIds: mongoose.Types.ObjectId[] = [];
     if (validatedData.assignedTo && validatedData.assignedTo.length > 0) {
         for (const assignedId of validatedData.assignedTo) {
-            if (!mongoose.Types.ObjectId.isValid(assignedId)) {
-                throw createError({ statusCode: 400, message: `Invalid assignedTo user ID format: ${assignedId}` });
-            }
-            // Optional: Check if assigned users exist in DB
+            if (!mongoose.Types.ObjectId.isValid(assignedId)) { throw createError({ statusCode: 400, message: `Invalid assignedTo user ID format: ${assignedId}` }); }
             assignedToUserIds.push(new mongoose.Types.ObjectId(assignedId));
         }
     }
 
-    // Build the Mongoose task object
     const taskToCreate = {
       title: validatedData.title,
       description: validatedData.description || undefined,
       status: validatedData.status,
       priority: validatedData.priority,
       dueDate: validatedData.dueDate ? new Date(validatedData.dueDate) : undefined,
-      projectId: targetProjectId, // Use validated ObjectId
-      userId: userId, // Task creator/owner
-      assignedTo: assignedToUserIds, // Use validated ObjectId array
+      projectId: targetProjectId, // Use ObjectId for DB
+      userId: userId, // Creator is ObjectId
+      assignedTo: assignedToUserIds, // Array of ObjectIds
+      cost: validatedData.cost !== undefined ? validatedData.cost : 0,
     };
 
     const task = await TaskModel.create(taskToCreate);
@@ -113,5 +114,7 @@ export default defineEventHandler(async (event) => {
     }
     console.error("tasks.post: Error creating task", error);
     throw createError({ statusCode: error.statusCode || 500, message: error.message || "Error creating task." });
+  } finally {
+    console.log("[API POST /tasks] --- END Request Processing ---");
   }
 });

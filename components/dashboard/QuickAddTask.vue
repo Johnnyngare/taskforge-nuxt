@@ -1,4 +1,3 @@
-<!-- components/dashboard/QuickAddTask.vue -->
 <template>
   <div
     class="rounded-xl border border-slate-600 bg-slate-800 p-6 shadow-sm"
@@ -88,7 +87,7 @@
         </div>
       </div>
 
-      <!-- New: Project Selector -->
+      <!-- Project Selector -->
       <div>
         <label
           for="quick-project"
@@ -112,6 +111,41 @@
           Error loading projects: {{ projectsError.message }}
         </p>
       </div>
+
+      <!-- New: Cost Input (for Checklist Item 2) -->
+      <div>
+        <label
+          for="quick-cost"
+          class="mb-1 block text-sm font-medium text-slate-300"
+        >
+          Cost (Optional)
+        </label>
+        <FormAppInput
+          id="quick-cost"
+          v-model.number="form.cost"
+          type="number"
+          placeholder="e.g., 50.00"
+          class="w-full"
+          :disabled="submitting"
+          step="0.01"
+        />
+      </div>
+      
+      <!-- New: Assigned To (for Checklist Item 5) -->
+      <!-- This would typically be a multi-select for users -->
+      <!-- <div>
+        <label for="quick-assigned-to" class="mb-1 block text-sm font-medium text-slate-300">
+          Assign To (Optional)
+        </label>
+        <select
+          id="quick-assigned-to"
+          v-model="form.assignedTo"
+          class="w-full rounded-lg border border-slate-600 bg-slate-700 px-3 py-2 text-slate-200 transition-colors focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20"
+          :disabled="submitting"
+        >
+          <option :value="null">Unassigned</option>
+        </select>
+      </div> -->
 
       <div class="flex flex-col-reverse gap-3 pt-2 sm:flex-row">
         <FormAppButton
@@ -139,12 +173,12 @@
 <script setup lang="ts">
 import { ref, computed } from "vue";
 import { useTasks } from "~/composables/useTasks";
-import { useProjects } from "~/composables/useProjects"; // Import useProjects
+import { useProjects } from "~/composables/useProjects";
 import { TaskPriority, TaskStatus, type ITask } from "~/types/task";
-import { useToast } from 'vue-toastification'; // Explicitly import useToast
+import { useToast } from 'vue-toastification';
 
 const { createTask } = useTasks();
-const { projects, pending: projectsPending, error: projectsError } = useProjects(); // Fetch projects
+const { projects, pending: projectsPending, error: projectsError } = useProjects();
 const toast = useToast();
 
 const emit = defineEmits<{
@@ -159,7 +193,9 @@ interface QuickAddForm {
   description: string;
   priority: TaskPriority;
   dueDate: string;
-  projectId: string | null; // Add projectId
+  projectId: string | null;
+  cost?: number | null;
+  assignedTo?: string[];
 }
 
 const form = ref<QuickAddForm>({
@@ -167,7 +203,9 @@ const form = ref<QuickAddForm>({
   description: "",
   priority: TaskPriority.Medium,
   dueDate: "",
-  projectId: null, // Initialize projectId
+  projectId: null,
+  cost: null,
+  assignedTo: [],
 });
 
 const today = computed(() => new Date().toISOString().split("T")[0]);
@@ -183,9 +221,10 @@ const submitTask = async () => {
       priority: form.value.priority,
       status: TaskStatus.Pending,
       dueDate: form.value.dueDate
-        ? new Date(`${form.value.dueDate}T00:00:00Z`).toISOString() // Ensure ISO string with Z
+        ? new Date(`${form.value.dueDate}T00:00:00Z`).toISOString()
         : undefined,
-      projectId: form.value.projectId || undefined, // Include projectId
+      projectId: form.value.projectId || undefined,
+      cost: form.value.cost !== null ? form.value.cost : undefined,
     };
 
     await createTask(taskData);
@@ -197,26 +236,17 @@ const submitTask = async () => {
       description: "",
       priority: TaskPriority.Medium,
       dueDate: "",
-      projectId: null, // Reset projectId
+      projectId: null,
+      cost: null,
+      assignedTo: [],
     };
 
-    toast.success({ // Use toast.success
-      title: "Task created!",
-      icon: "i-heroicons-check-circle",
-      color: "green",
-    });
+    toast.success("Task created successfully!"); // CHANGED: Simple string message
 
-    // No need to emit 'close' here as handleTaskCreated will trigger refresh which closes it.
-    // It's already emitted by handleTaskCreated in Dashboard.vue
-    // emit("close"); // Remove this if handleTaskCreated handles it
   } catch (error: any) {
     console.error("Error creating task:", error);
-    toast.error({ // Use toast.error
-      title: "Error creating task",
-      description: error.data?.message || "An unexpected error occurred.",
-      icon: "i-heroicons-exclamation-triangle",
-      color: "red",
-    });
+    const errorMessage = error.data?.message || "An unexpected error occurred.";
+    toast.error(`Error creating task: ${errorMessage}`); // CHANGED: Simple string message
   } finally {
     submitting.value = false;
   }

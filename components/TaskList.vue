@@ -29,7 +29,7 @@
 import type { ITask } from "~/types/task";
 
 const props = defineProps<{
-  tasks: ITask[]; // Array of ITask
+  tasks: ITask[];
 }>();
 
 const emit = defineEmits<{
@@ -47,6 +47,6 @@ const handleEdit = (taskId: string) => {
 };
 
 const handleDelete = (taskId: string) => {
-  emit("task-deleted", taskId);
+  emit("delete", taskId);
 };
 </script>

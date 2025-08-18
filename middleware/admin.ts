@@ -1,30 +1,25 @@
 // middleware/admin.ts
-// FIX: Correct import for useAuth (it's a named export)
 import { useAuth } from "~/composables/useAuth";
 import { navigateTo } from '#app';
-import { watch } from 'vue';
+import { watch } from 'vue'; // Explicitly import watch
 
-export default defineNuxtRouteMiddleware((to, from) => { // to/from are used, no _ prefix
-  const { isAuthenticated, isAdmin, initialized } = useAuth();
+export default defineNuxtRouteMiddleware(async (to) => {
+  const { isAuthenticated, isAdmin, initialized, fetchUser } = useAuth();
 
-  // Ensure the auth state is initialized before checking roles
+  // CRITICAL FIX: If not initialized, fetch user. This needs to be awaited.
   if (!initialized.value) {
-    return new Promise((resolve) => {
-      const stop = watch(initialized, (val) => {
-        if (val) {
-          stop();
-          if (isAuthenticated.value && !isAdmin.value) {
-            resolve(navigateTo("/dashboard", { replace: true }));
-          } else {
-            resolve();
-          }
-        }
-      }, { immediate: true });
-    });
+    console.log(`admin.ts: Auth state not initialized for route ${to.fullPath}. Attempting fetchUser.`);
+    await fetchUser(); // Ensure fetchUser runs and completes
   }
 
-  // Now do the check synchronously
+  // Now, check auth state and role *after* initialization attempt
   if (isAuthenticated.value && !isAdmin.value) {
+    console.log(
+      `admin.ts: Authenticated but non-admin user attempting to access admin route ${to.fullPath}. Redirecting to /dashboard.`
+    );
+    // Use { replace: true } to prevent back button issues
     return navigateTo("/dashboard", { replace: true });
   }
+  console.log(`admin.ts: User is admin or unauthenticated on admin route ${to.fullPath}. Allowing access.`);
+  // No explicit return needed if middleware should allow passage
 });

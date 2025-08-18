@@ -30,6 +30,7 @@
           <p v-if="project.startDate"><strong>Start Date:</strong> {{ new Date(project.startDate).toLocaleDateString() }}</p>
           <p v-if="project.endDate"><strong>End Date:</strong> {{ new Date(project.endDate).toLocaleDateString() }}</p>
           <p v-if="project.budget"><strong>Budget:</strong> ${{ project.budget?.toLocaleString() }}</p>
+          <p v-if="typeof project.totalTasksCost === 'number'"><strong>Tasks Cost:</strong> ${{ project.totalTasksCost?.toLocaleString() }}</p> <!-- NEW: Display Aggregated Task Cost -->
           <p><strong>Created:</strong> {{ new Date(project.createdAt).toLocaleDateString() }}</p>
           <p><strong>Last Updated:</strong> {{ formatRelativeDate(project.updatedAt) }}</p>
           <p><strong>Owner ID:</strong> {{ project.owner }}</p>
@@ -52,7 +53,7 @@
         </div>
       </div>
 
-      <!-- Add more project details, tasks, etc. here -->
+      <!-- Add more project details, tasks, etc. here (e.g., list of tasks for this project) -->
     </div>
     <div v-else class="py-12 text-center text-gray-500">
       <h2 class="text-xl font-bold">Project Not Found</h2>
@@ -119,11 +120,10 @@ const { data: project, pending, error, refresh } = await useAsyncData<IProject>(
     default: () => null,
     server: true,
     client: true,
-    // CRITICAL FIX: Use a getter function in watch for reactive projectId
     watch: [
-      () => projectId, // Watch for changes in the projectId parameter
-      () => user.value?.id, // Watch for changes in user.id
-      initialized // Watch initialized directly
+      () => projectId,
+      () => user.value?.id,
+      initialized
     ],
     immediate: true,
     lazy: false,

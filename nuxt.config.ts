@@ -1,4 +1,4 @@
-// nuxt.config.ts (Cleaned and simplified)
+// nuxt.config.ts
 import { defineNuxtConfig } from "nuxt/config";
 
 export default defineNuxtConfig({
@@ -70,6 +70,7 @@ export default defineNuxtConfig({
   },
 
   plugins: [],
-  middleware: ["02-auth", "guest", "admin"],
-  // REMOVED: vite.resolve.alias, build.rollupOptions.external, etc.
+  // CRITICAL FIX: REMOVED the 'middleware' array.
+  // Nuxt 3 automatically discovers middleware in the 'middleware/' directory.
+  // middleware: ["02-auth", "guest", "admin"], // <--- REMOVED THIS LINE
 });

@@ -2,9 +2,9 @@
 import mongoose from "mongoose";
 import { z } from "zod";
 import { TaskModel } from "~/server/db/models/task";
-import { defineEventHandler, readBody, createError } from "h3";
+import { defineEventHandler, readBody, createError } from '#imports';
 import { UserModel } from "~/server/db/models/user";
-import { ProjectModel } from "~/server/db/models/project"; // Import ProjectModel
+import { ProjectModel } from "~/server/db/models/project";
 import { UserRole } from "~/types/user";
 import type { ITask } from "~/types/task";
 
@@ -17,8 +17,9 @@ const taskUpdateSchema = z
       .optional(),
     priority: z.enum(["Low", "Medium", "High", "Urgent"]).optional(),
     dueDate: z.string().datetime({ message: "Invalid date format" }).optional().or(z.literal("")),
-    projectId: z.string().optional().nullable(), // Allow changing projectId
-    assignedTo: z.array(z.string()).optional(), // Allow changing assignedTo
+    projectId: z.string().optional().nullable(), // projectId comes as string
+    assignedTo: z.array(z.string()).optional(),
+    cost: z.number().min(0, "Cost cannot be negative.").optional().nullable(), // Added cost to schema
   })
   .strict();
 
@@ -45,26 +46,18 @@ export default defineEventHandler(async (event) => {
 
   // CRITICAL RBAC for UPDATE
   let canUpdate = false;
-  // Admin can update any task
-  if (role === UserRole.Admin) {
-    canUpdate = true;
-  } else if (String(taskToUpdate.userId) === String(userId)) {
-    // Owner of the task can update their own task
-    canUpdate = true;
-  } else if (taskToUpdate.projectId) {
+  if (role === UserRole.Admin) { canUpdate = true; }
+  else if (String(taskToUpdate.userId) === String(userId)) { canUpdate = true; }
+  else if (taskToUpdate.projectId) {
     // If task is part of a project, check project-based permissions
-    const project = await ProjectModel.findById(taskToUpdate.projectId).select('owner members').lean();
+    const project = await ProjectModel.findById(taskToUpdate.projectId).select('owner members').lean(); // projectId is ObjectId
     if (project) {
-      if (String(project.owner) === String(userId) && (role === "manager" || role === "dispatcher")) { // Manager/Dispatcher owns project
-        canUpdate = true;
-      } else if (project.members.map(String).includes(String(userId)) && (role === "manager" || role === "dispatcher")) { // Manager/Dispatcher is a member of project
-         canUpdate = true;
-      } else if (role === UserRole.TeamManager) { // Team Manager can update tasks in projects they manage
+      if (String(project.owner) === String(userId) && (role === "manager" || role === "dispatcher")) { canUpdate = true; }
+      else if (project.members.map(String).includes(String(userId)) && (role === "manager" || role === "dispatcher")) { canUpdate = true; }
+      else if (role === UserRole.TeamManager) {
         const managerDoc = await UserModel.findById(userId).select('managedProjects').lean();
         const managedProjectIds = managerDoc?.managedProjects?.map((id: string) => String(new mongoose.Types.ObjectId(id))) || [];
-        if (managedProjectIds.includes(String(taskToUpdate.projectId))) {
-          canUpdate = true;
-        }
+        if (managedProjectIds.includes(String(taskToUpdate.projectId))) { canUpdate = true; } // projectId is ObjectId for check
       }
     }
   }
@@ -89,12 +82,13 @@ export default defineEventHandler(async (event) => {
   if (updates.description === "") updates.description = null;
   if (updates.dueDate === "") updates.dueDate = null;
   if (updates.projectId === "") updates.projectId = null;
+  if (updates.cost === "") updates.cost = null;
 
-  // Convert projectId and assignedTo to ObjectId if present
   const updatePayload: Record<string, any> = { ...updates };
+  // Convert projectId to ObjectId if present and not null
   if (updates.projectId && typeof updates.projectId === 'string') {
     if (!mongoose.Types.ObjectId.isValid(updates.projectId)) throw createError({ statusCode: 400, message: "Invalid Project ID format for update." });
-    updatePayload.projectId = new mongoose.Types.ObjectId(updates.projectId);
+    updatePayload.projectId = new mongoose.Types.ObjectId(updates.projectId); // Convert to ObjectId
   } else if (updates.projectId === null) {
     updatePayload.projectId = null;
   }
@@ -106,13 +100,20 @@ export default defineEventHandler(async (event) => {
       return new mongoose.Types.ObjectId(id);
     });
   } else if (updates.assignedTo === null || updates.assignedTo === undefined) {
-    updatePayload.assignedTo = []; // Default to empty array if assignedTo is explicitly unset
+    updatePayload.assignedTo = [];
+  }
+
+  // Convert cost to number if it's not null and originally a string from form input type=number
+  if (typeof updates.cost === 'string' && !isNaN(parseFloat(updates.cost))) {
+      updatePayload.cost = parseFloat(updates.cost);
+  } else if (updates.cost === null) {
+      updatePayload.cost = null;
   }
 
 
   try {
     const updatedTask = await TaskModel.findByIdAndUpdate(taskId, updatePayload, {
-      new: true, // Return the updated document
+      new: true,
       runValidators: true,
     });
 

@@ -20,9 +20,15 @@ export interface ITask {
   status: TaskStatus;
   priority: TaskPriority;
   dueDate?: string; // ISO date string
-  projectId?: string; // Should be string (transformed from ObjectId)
+  projectId?: string; // Should be string (transformed from ObjectId, or plain string for in-memory)
   createdAt: string; // ISO date string
   updatedAt: string; // ISO date string
   userId: string; // Owner of the task (creator)
-  assignedTo?: string[]; // FIX: Change to string[] to match backend model
+  assignedTo?: string[]; // Array of string IDs
+  cost?: number; // NEW: Added cost field
+  project?: { // NEW: Add project object for populated data (from ref population)
+    id: string;
+    name: string;
+    // Add other project fields needed for display if desired (e.g., status, priority)
+  };
 }

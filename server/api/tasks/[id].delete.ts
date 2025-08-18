@@ -3,7 +3,7 @@ import mongoose from "mongoose";
 import { TaskModel } from "~/server/db/models/task";
 import { defineEventHandler, createError } from "h3";
 import { UserModel } from "~/server/db/models/user";
-import { ProjectModel } from "~/server/db/models/project"; // Import ProjectModel
+import { ProjectModel } from "~/server/db/models/project";
 import { UserRole } from "~/types/user";
 
 export default defineEventHandler(async (event) => {
@@ -31,26 +31,17 @@ export default defineEventHandler(async (event) => {
 
   // CRITICAL RBAC for DELETE
   let canDelete = false;
-  // Admin can delete any task
-  if (role === UserRole.Admin) {
-    canDelete = true;
-  } else if (String(taskToDelete.userId) === String(userId)) {
-    // Owner of the task can delete their own task
-    canDelete = true;
-  } else if (taskToDelete.projectId) {
-    // If task is part of a project, check project-based permissions
+  if (role === UserRole.Admin) { canDelete = true; }
+  else if (String(taskToDelete.userId) === String(userId)) { canDelete = true; }
+  else if (taskToDelete.projectId) {
     const project = await ProjectModel.findById(taskToDelete.projectId).select('owner members').lean();
     if (project) {
-      if (String(project.owner) === String(userId) && (role === "manager" || role === "dispatcher")) { // Manager/Dispatcher owns project
-        canDelete = true;
-      } else if (project.members.map(String).includes(String(userId)) && (role === "manager" || role === "dispatcher")) { // Manager/Dispatcher is a member of project
-         canDelete = true;
-      } else if (role === UserRole.TeamManager) { // Team Manager can delete tasks in projects they manage
+      if (String(project.owner) === String(userId) && (role === "manager" || role === "dispatcher")) { canDelete = true; }
+      else if (project.members.map(String).includes(String(userId)) && (role === "manager" || role === "dispatcher")) { canDelete = true; }
+      else if (role === UserRole.TeamManager) {
         const managerDoc = await UserModel.findById(userId).select('managedProjects').lean();
         const managedProjectIds = managerDoc?.managedProjects?.map((id: string) => String(new mongoose.Types.ObjectId(id))) || [];
-        if (managedProjectIds.includes(String(taskToDelete.projectId))) {
-          canDelete = true;
-        }
+        if (managedProjectIds.includes(String(taskToDelete.projectId))) { canDelete = true; }
       }
     }
   }
@@ -68,9 +59,9 @@ export default defineEventHandler(async (event) => {
     }
 
     return {
-      statusCode: 200, // Return 200 OK for successful deletion
+      statusCode: 200,
       message: "Task deleted successfully.",
-      taskId: taskId, // Confirm the deleted task ID
+      taskId: taskId,
     };
   } catch (error: any) {
     if (error.statusCode) { throw error; }

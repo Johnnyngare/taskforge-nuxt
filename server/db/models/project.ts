@@ -17,7 +17,7 @@ const projectSchema = new Schema<IProjectModel>({
   priority: { type: String, enum: ['low', 'medium', 'high'], default: 'medium', required: true },
   startDate: { type: Date, default: null },
   endDate: { type: Date, default: null },
-  budget: { type: Number },
+  budget: { type: Number, default: 0 }, // Ensure default value to handle null/undefined if needed
   owner: { type: Schema.Types.ObjectId, ref: 'User', required: true, index: true },
   members: [{ type: Schema.Types.ObjectId, ref: 'User', index: true }],
 }, {
@@ -28,17 +28,22 @@ const projectSchema = new Schema<IProjectModel>({
       ret.id = ret._id.toString();
       delete ret._id;
       delete ret.__v;
-      if (ret.owner && typeof ret.owner === 'object') ret.owner = String(ret.owner);
-      if (ret.members && Array.isArray(ret.members)) ret.members = ret.members.map(String);
+      // Ensure owner and members are consistently stringified
+      if (ret.owner && typeof ret.owner === 'object' && ret.owner._id) { // Check if populated object
+        ret.owner = ret.owner._id.toString();
+      } else if (ret.owner && typeof ret.owner !== 'string') { // Check if unpopulated ObjectId
+        ret.owner = ret.owner.toString();
+      }
+
+      if (ret.members && Array.isArray(ret.members)) {
+        ret.members = ret.members.map((member: any) =>
+          typeof member === 'object' && member._id ? member._id.toString() : String(member)
+        );
+      }
       return ret as IProject;
     },
   },
   id: true,
 });
-
-// FIX: Remove redundant index declarations. `index: true` on fields is sufficient.
-// Example of what to remove if present:
-// projectSchema.index({ owner: 1 });
-// projectSchema.index({ members: 1 });
 
 export const ProjectModel = model('Project', projectSchema);
