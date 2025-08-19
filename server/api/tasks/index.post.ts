@@ -3,7 +3,7 @@ import { defineEventHandler, readBody, setResponseStatus, createError } from '#i
 import { z } from "zod";
 import mongoose from "mongoose";
 
-import { TaskPriority, TaskStatus } from "~/types/task";
+import { TaskPriority, TaskStatus, TaskType } from "~/types/task"; // Import TaskType
 import { TaskModel } from "~/server/db/models/task";
 import { ProjectModel } from "~/server/db/models/project";
 import { UserModel } from "~/server/db/models/user";
@@ -15,10 +15,16 @@ const getEnumValues = <T extends Record<string, string>>(
   return values as [T[keyof T], ...T[keyof T][]];
 };
 
+// NEW: Zod Schema for GeoJSON Point
+const geoJsonPointSchema = z.object({
+  type: z.literal("Point"), // Must be "Point" for now, can extend later
+  coordinates: z.array(z.number()).length(2, "Coordinates must be a [longitude, latitude] array"),
+}).strict().optional().nullable(); // Make location optional and nullable
+
 const createTaskSchema = z.object({
   title: z.string().min(1, "Title is required"),
   description: z.string().optional().nullable(),
-  projectId: z.string().optional().nullable(), // Frontend sends string ID
+  projectId: z.string().optional().nullable(),
   priority: z.enum(getEnumValues(TaskPriority)).default(TaskPriority.Medium),
   status: z.enum(getEnumValues(TaskStatus)).default(TaskStatus.Pending),
   dueDate: z
@@ -26,8 +32,12 @@ const createTaskSchema = z.object({
     .datetime({ message: "Invalid date format" })
     .optional()
     .nullable(),
-  assignedTo: z.array(z.string()).optional(),
+  assignedTo: z.array(z.string().refine(val => mongoose.Types.ObjectId.isValid(val), "Invalid assignedTo ID format.")).optional(),
   cost: z.number().min(0, "Cost cannot be negative.").optional().nullable(),
+
+  // NEW MAPPING FIELDS:
+  taskType: z.enum(getEnumValues(TaskType)).default(TaskType.Office), // Default to 'office'
+  location: geoJsonPointSchema, // Use the new GeoJSON point schema
 });
 
 export default defineEventHandler(async (event) => {
@@ -56,12 +66,12 @@ export default defineEventHandler(async (event) => {
   try {
     const validatedData = createTaskSchema.parse(rawBody);
 
-    let targetProjectId: mongoose.Types.ObjectId | undefined; // CRITICAL: Target type is ObjectId
+    let targetProjectId: mongoose.Types.ObjectId | undefined;
     if (validatedData.projectId) {
       if (!mongoose.Types.ObjectId.isValid(validatedData.projectId)) {
         throw createError({ statusCode: 400, message: "Invalid Project ID format." });
       }
-      targetProjectId = new mongoose.Types.ObjectId(validatedData.projectId); // Convert string to ObjectId
+      targetProjectId = new mongoose.Types.ObjectId(validatedData.projectId);
 
       // RBAC: User can only create tasks for projects they own/manage/are members of (if not Admin)
       if (role !== "admin") {
@@ -73,6 +83,7 @@ export default defineEventHandler(async (event) => {
         if (project.members.map(String).includes(String(userId))) hasProjectAccess = true;
 
         if (!hasProjectAccess && role === "manager") {
+            // Need to fetch managedProjects for the manager
             const managerDoc = await UserModel.findById(userId).select('managedProjects').lean();
             if (managerDoc?.managedProjects?.map(String).includes(String(targetProjectId))) { hasProjectAccess = true; }
         }
@@ -86,10 +97,27 @@ export default defineEventHandler(async (event) => {
     let assignedToUserIds: mongoose.Types.ObjectId[] = [];
     if (validatedData.assignedTo && validatedData.assignedTo.length > 0) {
         for (const assignedId of validatedData.assignedTo) {
-            if (!mongoose.Types.ObjectId.isValid(assignedId)) { throw createError({ statusCode: 400, message: `Invalid assignedTo user ID format: ${assignedId}` }); }
             assignedToUserIds.push(new mongoose.Types.ObjectId(assignedId));
         }
     }
+
+    // Prepare location data based on taskType
+    let locationToSave = undefined;
+    if (validatedData.taskType === TaskType.Field && validatedData.location) {
+        // Ensure coordinates are [longitude, latitude] as per GeoJSON standard
+        if (validatedData.location.coordinates.length === 2) {
+            locationToSave = {
+                type: "Point",
+                coordinates: [validatedData.location.coordinates[0], validatedData.location.coordinates[1]]
+            };
+        } else {
+            throw createError({ statusCode: 400, message: "Invalid location coordinates for a Point." });
+        }
+    } else if (validatedData.taskType === TaskType.Office) {
+        // Explicitly ensure location is null/undefined for office tasks
+        locationToSave = undefined;
+    }
+
 
     const taskToCreate = {
       title: validatedData.title,
@@ -97,10 +125,14 @@ export default defineEventHandler(async (event) => {
       status: validatedData.status,
       priority: validatedData.priority,
       dueDate: validatedData.dueDate ? new Date(validatedData.dueDate) : undefined,
-      projectId: targetProjectId, // Use ObjectId for DB
-      userId: userId, // Creator is ObjectId
-      assignedTo: assignedToUserIds, // Array of ObjectIds
-      cost: validatedData.cost !== undefined ? validatedData.cost : 0,
+      projectId: targetProjectId,
+      userId: userId,
+      assignedTo: assignedToUserIds,
+      cost: validatedData.cost !== undefined && validatedData.cost !== null ? validatedData.cost : 0,
+
+      // NEW MAPPING FIELDS:
+      taskType: validatedData.taskType,
+      location: locationToSave, // Use the prepared location data
     };
 
     const task = await TaskModel.create(taskToCreate);

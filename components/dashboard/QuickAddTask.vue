@@ -1,3 +1,4 @@
+<!-- components/dashboard/QuickAddTask.vue -->
 <template>
   <div
     class="rounded-xl border border-slate-600 bg-slate-800 p-6 shadow-sm"
@@ -112,7 +113,7 @@
         </p>
       </div>
 
-      <!-- New: Cost Input (for Checklist Item 2) -->
+      <!-- Cost Input -->
       <div>
         <label
           for="quick-cost"
@@ -130,22 +131,51 @@
           step="0.01"
         />
       </div>
-      
-      <!-- New: Assigned To (for Checklist Item 5) -->
-      <!-- This would typically be a multi-select for users -->
-      <!-- <div>
-        <label for="quick-assigned-to" class="mb-1 block text-sm font-medium text-slate-300">
-          Assign To (Optional)
+
+      <!-- Task Type Selector (Office/Field) -->
+      <div>
+        <label
+          for="task-type"
+          class="mb-1 block text-sm font-medium text-slate-300"
+        >
+          Task Type
         </label>
         <select
-          id="quick-assigned-to"
-          v-model="form.assignedTo"
+          id="task-type"
+          v-model="form.taskType"
           class="w-full rounded-lg border border-slate-600 bg-slate-700 px-3 py-2 text-slate-200 transition-colors focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20"
           :disabled="submitting"
         >
-          <option :value="null">Unassigned</option>
+          <option :value="TaskType.Office">Office Task</option>
+          <option :value="TaskType.Field">Field Task</option>
         </select>
-      </div> -->
+      </div>
+
+      <!-- Map Picker for Field Tasks -->
+      <ClientOnly fallback-tag="div" fallback="Loading map interface...">
+        <div v-if="form.taskType === TaskType.Field">
+          <label class="mb-1 block text-sm font-medium text-slate-300">
+            Pick Location for Field Task
+            <span class="text-xs text-slate-500"
+              >(Click on map to place marker)</span
+            >
+          </label>
+          <p v-if="form.location" class="mb-2 text-sm text-emerald-400">
+            Selected: Lat {{ form.location.coordinates[1].toFixed(4) }}, Lng
+            {{ form.location.coordinates[0].toFixed(4) }}
+          </p>
+          <!--
+            UPDATED: The UiLeafletMap component is now just a container.
+            The marker logic is handled programmatically in the script below.
+          -->
+          <UiLeafletMap
+            height="300px"
+            :zoom="initialMapZoom"
+            :center="initialMapCenter"
+            @map-ready="onMapReady"
+          />
+        </div>
+      </ClientOnly>
 
       <div class="flex flex-col-reverse gap-3 pt-2 sm:flex-row">
         <FormAppButton
@@ -171,15 +201,32 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed } from "vue";
+import { ref, computed, watch } from "vue";
 import { useTasks } from "~/composables/useTasks";
 import { useProjects } from "~/composables/useProjects";
-import { TaskPriority, TaskStatus, type ITask } from "~/types/task";
-import { useToast } from 'vue-toastification';
+import {
+  TaskPriority,
+  TaskStatus,
+  TaskType,
+  type ITask,
+  type GeoJSONPoint,
+} from "~/types/task";
+import { useToast } from "vue-toastification";
+import UiLeafletMap from "~/components/ui/LeafletMap.vue";
+// --- UPDATED: Import our new composable ---
+import { useLeaflet } from "~/composables/useLeaflet";
+import type {
+  Map as LeafletMapInstance,
+  LatLngExpression,
+  LeafletMouseEvent,
+  Marker as LeafletMarker, // Import Marker type
+} from "leaflet";
 
 const { createTask } = useTasks();
 const { projects, pending: projectsPending, error: projectsError } = useProjects();
 const toast = useToast();
+// --- UPDATED: Get Leaflet library via the composable. It's a Ref now. ---
+const { leaflet: L } = useLeaflet();
 
 const emit = defineEmits<{
   (e: "task-created"): void;
@@ -195,7 +242,8 @@ interface QuickAddForm {
   dueDate: string;
   projectId: string | null;
   cost?: number | null;
-  assignedTo?: string[];
+  taskType: TaskType;
+  location?: GeoJSONPoint;
 }
 
 const form = ref<QuickAddForm>({
@@ -205,13 +253,84 @@ const form = ref<QuickAddForm>({
   dueDate: "",
   projectId: null,
   cost: null,
-  assignedTo: [],
+  taskType: TaskType.Office,
+  location: undefined,
 });
 
 const today = computed(() => new Date().toISOString().split("T")[0]);
 
+// --- Map Related State and Functions ---
+const mapInstance = ref<LeafletMapInstance | null>(null);
+const locationMarker = ref<LeafletMarker | null>(null); // Ref to hold the marker instance
+const initialMapZoom = 13;
+const initialMapCenter = ref<LatLngExpression>([51.505, -0.09]);
+
+const onMapReady = (map: LeafletMapInstance) => {
+  mapInstance.value = map;
+  // Geolocation logic remains the same
+  if (navigator.geolocation) {
+    navigator.geolocation.getCurrentPosition(
+      (position) => {
+        const lat = position.coords.latitude;
+        const lng = position.coords.longitude;
+        initialMapCenter.value = [lat, lng];
+        map.setView([lat, lng], initialMapZoom);
+      },
+      (error) => console.warn("Geolocation error:", error.message)
+    );
+  }
+};
+
+// --- UPDATED: New function to handle map clicks ---
+const handleMapClick = (e: LeafletMouseEvent) => {
+  if (!L.value || !mapInstance.value) return;
+
+  const coords: [number, number] = [e.latlng.lng, e.latlng.lat];
+  // Update the form state directly
+  form.value.location = {
+    type: "Point",
+    coordinates: coords,
+  };
+
+  // Add or move the marker for visual feedback
+  if (!locationMarker.value) {
+    locationMarker.value = L.value.marker(e.latlng).addTo(mapInstance.value);
+  } else {
+    locationMarker.value.setLatLng(e.latlng);
+  }
+  locationMarker.value
+    .bindPopup(`Selected: Lat ${e.latlng.lat.toFixed(4)}, Lng ${e.latlng.lng.toFixed(4)}`)
+    .openPopup();
+};
+
+// --- UPDATED: Watcher to attach click listener when map and Leaflet are ready ---
+watch([mapInstance, L], ([map, leaflet]) => {
+  if (map && leaflet) {
+    map.on("click", handleMapClick);
+  }
+});
+
+// --- UPDATED: Watcher to clear location and REMOVE MARKER ---
+watch(
+  () => form.value.taskType,
+  (newType) => {
+    if (newType === TaskType.Office) {
+      form.value.location = undefined;
+      if (locationMarker.value && mapInstance.value) {
+        locationMarker.value.remove();
+        locationMarker.value = null;
+      }
+    }
+  }
+);
+
 const submitTask = async () => {
   if (!form.value.title.trim() || submitting.value) return;
+
+  if (form.value.taskType === TaskType.Field && !form.value.location) {
+    toast.error("Please pick a location on the map for Field tasks.");
+    return;
+  }
 
   submitting.value = true;
   try {
@@ -224,13 +343,16 @@ const submitTask = async () => {
         ? new Date(`${form.value.dueDate}T00:00:00Z`).toISOString()
         : undefined,
       projectId: form.value.projectId || undefined,
-      cost: form.value.cost !== null ? form.value.cost : undefined,
+      cost: form.value.cost != null ? form.value.cost : undefined,
+      taskType: form.value.taskType,
+      location: form.value.location,
     };
 
     await createTask(taskData);
     emit("task-created");
+    toast.success("Task created successfully!");
 
-    // Reset form fields
+    // --- UPDATED: Reset form and also remove the marker ---
     form.value = {
       title: "",
       description: "",
@@ -238,15 +360,17 @@ const submitTask = async () => {
       dueDate: "",
       projectId: null,
       cost: null,
-      assignedTo: [],
+      taskType: TaskType.Office,
+      location: undefined,
     };
-
-    toast.success("Task created successfully!"); // CHANGED: Simple string message
-
+    if (locationMarker.value && mapInstance.value) {
+      locationMarker.value.remove();
+      locationMarker.value = null;
+    }
   } catch (error: any) {
     console.error("Error creating task:", error);
     const errorMessage = error.data?.message || "An unexpected error occurred.";
-    toast.error(`Error creating task: ${errorMessage}`); // CHANGED: Simple string message
+    toast.error(`Error creating task: ${errorMessage}`);
   } finally {
     submitting.value = false;
   }

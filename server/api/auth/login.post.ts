@@ -1,7 +1,7 @@
 // server/api/auth/login.post.ts
 import { defineEventHandler, readBody, createError, setCookie } from "h3";
 import { z } from "zod";
-import bcrypt from "bcrypt";
+import bcrypt from "bcryptjs";
 import { UserModel } from "~/server/db/models/user";
 import { signJwt } from "~/server/utils/jwtHelper";
 

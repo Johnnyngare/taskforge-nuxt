@@ -1,3 +1,4 @@
+<!-- pages/dashboard/index.vue -->
 <template>
   <div>
     <!-- Welcome Banner -->
@@ -21,6 +22,9 @@
           <Icon name="heroicons:plus" class="mr-2 h-4 w-4" />
           Add Task
         </FormAppButton>
+
+        <!-- Removed temporary MyAwesomeButton components from here -->
+
       </div>
       <div class="text-sm text-slate-400">
         {{ tasks?.length || 0 }}
@@ -74,6 +78,9 @@
 
       <!-- Sidebar -->
       <div class="space-y-6">
+        <!-- NEW: Field Task Map added to the sidebar -->
+        <DashboardFieldTasksMap :tasks="tasks" />
+
         <!-- Productivity Stats -->
         <div class="rounded-xl border border-slate-700 bg-slate-800 p-6">
           <h3 class="mb-4 text-lg font-semibold text-slate-200">
@@ -137,6 +144,11 @@ import { type ITask, TaskStatus } from "~/types/task";
 import { useToast } from 'vue-toastification';
 import { useCookie } from '#app';
 
+// Import necessary local components
+import DashboardFieldTasksMap from '~/components/dashboard/DashboardFieldTasksMap.vue';
+import DashboardQuickAddTask from '~/components/dashboard/QuickAddTask.vue'; // Make sure this is imported if used in template
+import TaskEditModal from '~/components/TaskEditModal.vue'; // Corrected path to main components folder
+
 definePageMeta({
   layout: "dashboard",
   middleware: "02-auth",
@@ -153,14 +165,13 @@ const toast = useToast();
 
 const authTokenCookie = useCookie('auth_token');
 
-// CRITICAL FIX: Ensure refresh() is called ONLY when auth is fully stable.
 watch([isAuthenticated, initialized, () => authUser.value?.id, authTokenCookie], ([isAuth, isInit, userId, token]) => {
   if (isInit && isAuth && userId && token) {
     if (!tasks.value.length && !pending.value || error.value) {
         setTimeout(() => {
             console.log("Dashboard: Auth state and cookie are fully ready, calling useTasks.refresh().");
             refresh();
-        }, 200); // Small delay, to ensure cookie is sent reliably for the concurrent API call.
+        }, 200);
     }
   } else if (isInit && !isAuth && !token) {
     console.log("Dashboard: Auth state initialized but unauthenticated (no token). Not fetching tasks.");
@@ -202,19 +213,18 @@ const upcomingTasks = computed(() => {
 
 const handleTaskCreated = () => {
   showQuickAdd.value = false;
-  refresh(); // Refresh useTasks data after creating a task
-  toast.success("Task created successfully!"); // CHANGED: Simple string message
+  refresh();
+  toast.success("Task created successfully!");
 };
 
 const handleTaskUpdate = async (taskId: string, updates: Partial<ITask>) => {
   try {
     await updateTask(taskId, updates);
     refresh();
-    toast.success("Task updated!"); // CHANGED: Simple string message
+    toast.success("Task updated!");
   } catch (err: unknown) {
-    // Access message from error.data.message as per your backend structure
     const errorMessage = (err as any).data?.message || "An unexpected error occurred.";
-    toast.error(`Error updating task: ${errorMessage}`); // CHANGED: Simple string message
+    toast.error(`Error updating task: ${errorMessage}`);
   }
 };
 
@@ -223,10 +233,10 @@ const handleTaskDelete = async (taskId: string) => {
   try {
     await deleteTask(taskId);
     refresh();
-    toast.info("Task deleted!"); // CHANGED: Simple string message
+    toast.info("Task deleted!");
   } catch (err: unknown) {
     const errorMessage = (err as any).data?.message || "An unexpected error occurred.";
-    toast.error(`Error deleting task: ${errorMessage}`); // CHANGED: Simple string message
+    toast.error(`Error deleting task: ${errorMessage}`);
   }
 };
 
@@ -244,10 +254,10 @@ const handleSaveEdit = async (taskId: string, updatedData: Partial<ITask>) => {
     await updateTask(taskId, updatedData);
     editingTask.value = null;
     refresh();
-    toast.success("Task saved!"); // CHANGED: Simple string message
+    toast.success("Task saved!");
   } catch (err: unknown) {
     const errorMessage = (err as any).data?.message || "An unexpected error occurred.";
-    toast.error(`Error saving task: ${errorMessage}`); // CHANGED: Simple string message
+    toast.error(`Error saving task: ${errorMessage}`);
   }
 };
 

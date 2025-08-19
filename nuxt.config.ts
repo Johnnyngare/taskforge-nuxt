@@ -6,7 +6,15 @@ export default defineNuxtConfig({
   devtools: { enabled: true },
   ssr: true,
 
-  modules: ["@nuxt/ui", "@pinia/nuxt", "@vueuse/motion/nuxt", "@vueuse/nuxt"],
+  // --- UPDATED ---
+  // Removed '@nuxtjs/leaflet' as we are now using a more performant
+  // composable-based approach to lazy-load the library.
+  modules: [
+    "@nuxt/ui",
+    "@pinia/nuxt",
+    "@vueuse/motion/nuxt",
+    "@vueuse/nuxt",
+  ],
 
   runtimeConfig: {
     private: {
@@ -37,7 +45,12 @@ export default defineNuxtConfig({
     storageKey: "taskforge-color-mode",
   },
 
+  // --- UPDATED ---
+  // Removed 'leaflet/dist/leaflet.css'.
+  // The CSS is now imported directly within our LeafletMap.vue component.
+  // This ensures it's only loaded when a map is actually on the page.
   css: ["~/assets/css/main.css"],
+
   postcss: {
     plugins: {
       tailwindcss: {},
@@ -70,7 +83,10 @@ export default defineNuxtConfig({
   },
 
   plugins: [],
-  // CRITICAL FIX: REMOVED the 'middleware' array.
-  // Nuxt 3 automatically discovers middleware in the 'middleware/' directory.
-  // middleware: ["02-auth", "guest", "admin"], // <--- REMOVED THIS LINE
+
+  // --- REMOVED OBSOLETE CONFIGURATIONS ---
+  // The 'build' and 'vite' configurations related to '@vue-leaflet/vue-leaflet'
+  // have been removed. They were workarounds for a different library that we
+  // are no longer using. Our current composable-based approach does not
+  // require any special build or Vite configuration.
 });

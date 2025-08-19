@@ -7,21 +7,37 @@ import { UserModel } from "~/server/db/models/user";
 import { ProjectModel } from "~/server/db/models/project";
 import { UserRole } from "~/types/user";
 import type { ITask } from "~/types/task";
+import { TaskType, TaskStatus, TaskPriority } from "~/types/task"; // Import TaskType, etc.
+
+// NEW: Zod Schema for GeoJSON Point
+const geoJsonPointSchema = z.object({
+  type: z.literal("Point"),
+  coordinates: z.array(z.number()).length(2, "Coordinates must be a [longitude, latitude] array"),
+}).strict().optional().nullable();
+
+const getEnumValues = <T extends Record<string, string>>(
+  enumObject: T
+): [T[keyof T], ...T[keyof T][]] => {
+  const values = Object.values(enumObject);
+  return values as [T[keyof T], ...T[keyof T][]];
+};
 
 const taskUpdateSchema = z
   .object({
     title: z.string().min(1, "Title cannot be empty.").optional(),
-    description: z.string().optional().or(z.literal("")),
-    status: z
-      .enum(["pending", "in_progress", "completed", "cancelled"])
-      .optional(),
-    priority: z.enum(["Low", "Medium", "High", "Urgent"]).optional(),
-    dueDate: z.string().datetime({ message: "Invalid date format" }).optional().or(z.literal("")),
-    projectId: z.string().optional().nullable(), // projectId comes as string
-    assignedTo: z.array(z.string()).optional(),
-    cost: z.number().min(0, "Cost cannot be negative.").optional().nullable(), // Added cost to schema
+    description: z.string().optional().or(z.literal("")).nullable(), // Allow null explicitly
+    status: z.enum(getEnumValues(TaskStatus)).optional(),
+    priority: z.enum(getEnumValues(TaskPriority)).optional(),
+    dueDate: z.string().datetime({ message: "Invalid date format" }).optional().or(z.literal("")).nullable(), // Allow null explicitly
+    projectId: z.string().optional().nullable(),
+    assignedTo: z.array(z.string().refine(val => mongoose.Types.ObjectId.isValid(val), "Invalid assignedTo ID format.")).optional().nullable(),
+    cost: z.number().min(0, "Cost cannot be negative.").optional().nullable(),
+
+    // NEW MAPPING FIELDS:
+    taskType: z.enum(getEnumValues(TaskType)).optional(), // Can update task type
+    location: geoJsonPointSchema, // Can update or remove location
   })
-  .strict();
+  .strict(); // strict() ensures no extra properties are passed
 
 export default defineEventHandler(async (event) => {
   const taskId = event.context.params?.id;
@@ -44,20 +60,19 @@ export default defineEventHandler(async (event) => {
     throw createError({ statusCode: 404, message: "Task not found" });
   }
 
-  // CRITICAL RBAC for UPDATE
+  // CRITICAL RBAC for UPDATE (unchanged from previous version, as it was correct)
   let canUpdate = false;
   if (role === UserRole.Admin) { canUpdate = true; }
   else if (String(taskToUpdate.userId) === String(userId)) { canUpdate = true; }
   else if (taskToUpdate.projectId) {
-    // If task is part of a project, check project-based permissions
-    const project = await ProjectModel.findById(taskToUpdate.projectId).select('owner members').lean(); // projectId is ObjectId
+    const project = await ProjectModel.findById(taskToUpdate.projectId).select('owner members').lean();
     if (project) {
-      if (String(project.owner) === String(userId) && (role === "manager" || role === "dispatcher")) { canUpdate = true; }
-      else if (project.members.map(String).includes(String(userId)) && (role === "manager" || role === "dispatcher")) { canUpdate = true; }
+      if (String(project.owner) === String(userId) && (role === UserRole.Manager || role === UserRole.Dispatcher)) { canUpdate = true; }
+      else if (project.members.map(String).includes(String(userId)) && (role === UserRole.Manager || role === UserRole.Dispatcher)) { canUpdate = true; }
       else if (role === UserRole.TeamManager) {
         const managerDoc = await UserModel.findById(userId).select('managedProjects').lean();
-        const managedProjectIds = managerDoc?.managedProjects?.map((id: string) => String(new mongoose.Types.ObjectId(id))) || [];
-        if (managedProjectIds.includes(String(taskToUpdate.projectId))) { canUpdate = true; } // projectId is ObjectId for check
+        const managedProjectIds = managerDoc?.managedProjects?.map((id: mongoose.Types.ObjectId) => String(id)) || [];
+        if (managedProjectIds.includes(String(taskToUpdate.projectId))) { canUpdate = true; }
       }
     }
   }
@@ -69,6 +84,7 @@ export default defineEventHandler(async (event) => {
 
   const validation = taskUpdateSchema.safeParse(body);
   if (!validation.success) {
+    console.error("Task update validation failed:", validation.error.format());
     throw createError({
       statusCode: 400,
       message: "Invalid update data.",
@@ -77,37 +93,79 @@ export default defineEventHandler(async (event) => {
   }
 
   const updates = validation.data;
+  const updatePayload: Record<string, any> = {}; // Initialize updatePayload
 
-  // Handle null/empty string values for optional fields
-  if (updates.description === "") updates.description = null;
-  if (updates.dueDate === "") updates.dueDate = null;
-  if (updates.projectId === "") updates.projectId = null;
-  if (updates.cost === "") updates.cost = null;
+  // Apply updates conditionally
+  if (updates.title !== undefined) updatePayload.title = updates.title;
+  if (updates.description !== undefined) updatePayload.description = updates.description === "" ? null : updates.description; // Handle empty string to null
+  if (updates.status !== undefined) updatePayload.status = updates.status;
+  if (updates.priority !== undefined) updatePayload.priority = updates.priority;
+  if (updates.dueDate !== undefined) updatePayload.dueDate = updates.dueDate === "" ? null : (updates.dueDate ? new Date(updates.dueDate) : null); // Handle empty string to null or convert to Date
+  if (updates.cost !== undefined) updatePayload.cost = updates.cost === "" ? null : updates.cost; // Handle empty string to null or keep number
 
-  const updatePayload: Record<string, any> = { ...updates };
-  // Convert projectId to ObjectId if present and not null
-  if (updates.projectId && typeof updates.projectId === 'string') {
-    if (!mongoose.Types.ObjectId.isValid(updates.projectId)) throw createError({ statusCode: 400, message: "Invalid Project ID format for update." });
-    updatePayload.projectId = new mongoose.Types.ObjectId(updates.projectId); // Convert to ObjectId
-  } else if (updates.projectId === null) {
-    updatePayload.projectId = null;
-  }
-  
-  if (updates.assignedTo) {
-    if (!Array.isArray(updates.assignedTo)) throw createError({ statusCode: 400, message: "Invalid assignedTo format. Must be an array of user IDs." });
-    updatePayload.assignedTo = updates.assignedTo.map(id => {
-      if (!mongoose.Types.ObjectId.isValid(id)) throw createError({ statusCode: 400, message: `Invalid assignedTo user ID format: ${id}` });
-      return new mongoose.Types.ObjectId(id);
-    });
-  } else if (updates.assignedTo === null || updates.assignedTo === undefined) {
-    updatePayload.assignedTo = [];
+  // Handle projectId update
+  if (updates.projectId !== undefined) {
+    if (updates.projectId === null || updates.projectId === "") {
+      updatePayload.projectId = null;
+    } else if (typeof updates.projectId === 'string' && mongoose.Types.ObjectId.isValid(updates.projectId)) {
+      updatePayload.projectId = new mongoose.Types.ObjectId(updates.projectId);
+    } else {
+      throw createError({ statusCode: 400, message: "Invalid Project ID format for update." });
+    }
   }
 
-  // Convert cost to number if it's not null and originally a string from form input type=number
-  if (typeof updates.cost === 'string' && !isNaN(parseFloat(updates.cost))) {
-      updatePayload.cost = parseFloat(updates.cost);
-  } else if (updates.cost === null) {
-      updatePayload.cost = null;
+  // Handle assignedTo update
+  if (updates.assignedTo !== undefined) {
+    if (updates.assignedTo === null || updates.assignedTo.length === 0) {
+      updatePayload.assignedTo = [];
+    } else if (Array.isArray(updates.assignedTo)) {
+      updatePayload.assignedTo = updates.assignedTo.map(id => new mongoose.Types.ObjectId(id));
+    } else {
+      throw createError({ statusCode: 400, message: "Invalid assignedTo format. Must be an array of user IDs." });
+    }
+  }
+
+  // NEW MAPPING FIELDS LOGIC:
+  if (updates.taskType !== undefined) {
+      updatePayload.taskType = updates.taskType;
+  }
+
+  // If taskType is changed to Office, ensure location is removed/nullified
+  // OR if a location is explicitly passed, process it
+  if (updates.location !== undefined) { // If location is part of the update payload
+      if (updates.taskType === TaskType.Office || updates.location === null) {
+          updatePayload.location = null; // Set location to null if office task or explicitly null
+      } else if (updates.taskType === TaskType.Field && updates.location) {
+          if (updates.location.type === "Point" && updates.location.coordinates?.length === 2) {
+              updatePayload.location = {
+                  type: "Point",
+                  coordinates: [updates.location.coordinates[0], updates.location.coordinates[1]]
+              };
+          } else {
+              throw createError({ statusCode: 400, message: "Invalid location data for Field task." });
+          }
+      } else if (updates.taskType === undefined && updates.location) {
+          // If taskType is not being updated, but location is provided,
+          // ensure the current taskType is 'Field' if location is being set.
+          // Or allow setting location if it's already a field task.
+          if (taskToUpdate.taskType === TaskType.Field) {
+               if (updates.location.type === "Point" && updates.location.coordinates?.length === 2) {
+                   updatePayload.location = {
+                       type: "Point",
+                       coordinates: [updates.location.coordinates[0], updates.location.coordinates[1]]
+                   };
+               } else {
+                   throw createError({ statusCode: 400, message: "Invalid location data for Field task (existing)." });
+               }
+          } else {
+              // If current task is Office type and location is attempted to be set without changing taskType, disallow.
+              throw createError({ statusCode: 400, message: "Cannot set location on an Office task without changing task type to Field." });
+          }
+      }
+  } else if (updates.taskType === TaskType.Office) {
+      // If taskType is explicitly set to Office and location was NOT in the update payload,
+      // explicitly clear location from DB.
+      updatePayload.location = null;
   }
 
 
@@ -121,7 +179,7 @@ export default defineEventHandler(async (event) => {
       throw createError({ statusCode: 404, message: "Task not found" });
     }
 
-    const responseTask: ITask = updatedTask.toJSON();
+    const responseTask: ITask = updatedTask.toJSON(); // Apply Mongoose transform
     return { statusCode: 200, message: "Task updated successfully", task: responseTask };
   } catch (error: any) {
     if (error.statusCode) { throw error; }
