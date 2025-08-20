@@ -1,3 +1,4 @@
+// pages/index.vue
 <template>
   <!-- Main container, ensuring full screen height and dark theme base -->
   <div

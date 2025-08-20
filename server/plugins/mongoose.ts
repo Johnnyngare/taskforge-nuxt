@@ -1,24 +1,25 @@
 // server/plugins/mongoose.ts
 import mongoose from 'mongoose';
+import { useRuntimeConfig } from '#imports';
 
 export default defineNitroPlugin(async (nitroApp) => {
-  // Access runtime config (from nuxt.config.ts)
   const config = useRuntimeConfig();
 
-  // Check if MONGODB_URI is provided
-  if (!config.MONGODB_URI) {
-    console.error('MONGO_URI is not defined in runtimeConfig!');
-    return; // Don't try to connect if URI is missing
+  if (!config.private.mongodbUri) {
+    console.error('FATAL ERROR: MONGODB_URI is not defined in runtimeConfig.');
+   
+    return;
   }
 
-  // Connect to MongoDB
   try {
-    await mongoose.connect(config.MONGODB_URI, {
-      dbName: 'taskforge', // Specify your database name here
-      // Remove useNewUrlParser and useUnifiedTopology as they are no longer supported/needed
+    // Set a longer buffer timeout globally just in case, but the plugin should prevent it.
+    mongoose.set('bufferTimeoutMS', 30000);
+    
+    await mongoose.connect(config.private.mongodbUri, {
+      dbName: 'taskforge_db', // Or extract from URI if you prefer
     });
-    console.log('✅ Connected to MongoDB!');
+    console.log('✅ MongoDB connection established on server startup.');
   } catch (err) {
-    console.error('❌ Could not connect to MongoDB:', err);
+    console.error('❌ Could not connect to MongoDB on server startup:', err);
   }
 });

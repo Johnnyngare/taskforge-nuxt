@@ -1,3 +1,4 @@
+<!-- components/project/ProjectModal.vue -->
 <template>
   <!-- Modal Backdrop -->
   <div
@@ -29,13 +30,13 @@
         <div class="space-y-6 p-6">
           <div>
             <label
-              for="project-name"
+              :for="projectNameId"
               class="mb-2 block text-sm font-medium text-gray-700"
             >
               Project Name *
             </label>
             <FormAppInput
-              id="project-name"
+              :id="projectNameId"
               v-model="form.name"
               placeholder="e.g., Q4 Marketing Campaign"
               required
@@ -45,13 +46,13 @@
           </div>
           <div>
             <label
-              for="project-description"
+              :for="projectDescriptionId"
               class="mb-2 block text-sm font-medium text-gray-700"
             >
               Description
             </label>
             <textarea
-              id="project-description"
+              :id="projectDescriptionId"
               v-model="form.description"
               placeholder="Describe what this project is about..."
               rows="4"
@@ -62,41 +63,91 @@
           <div class="grid grid-cols-1 gap-6 sm:grid-cols-2">
             <div>
               <label
-                for="project-status"
+                :for="projectStatusId"
                 class="mb-2 block text-sm font-medium text-gray-700"
               >
                 Status
               </label>
               <select
-                id="project-status"
+                :id="projectStatusId"
                 v-model="form.status"
                 class="w-full rounded-lg border border-gray-300 px-3 py-2 transition-colors focus:border-blue-500 focus:ring-2 focus:ring-blue-500"
                 :disabled="submitting"
               >
-                <option value="active">Active</option>
-                <option value="on_hold">On Hold</option>
-                <option value="completed">Completed</option>
-                <option value="cancelled">Cancelled</option>
+                <!-- Using enums for values -->
+                <option :value="ProjectStatus.Active">Active</option>
+                <option :value="ProjectStatus.OnHold">On Hold</option>
+                <option :value="ProjectStatus.Completed">Completed</option>
+                <option :value="ProjectStatus.Cancelled">Cancelled</option>
               </select>
             </div>
             <div>
               <label
-                for="project-priority"
+                :for="projectPriorityId"
                 class="mb-2 block text-sm font-medium text-gray-700"
               >
                 Priority
               </label>
               <select
-                id="project-priority"
+                :id="projectPriorityId"
                 v-model="form.priority"
                 class="w-full rounded-lg border border-gray-300 px-3 py-2 transition-colors focus:border-blue-500 focus:ring-2 focus:ring-blue-500"
                 :disabled="submitting"
               >
-                <option value="low">Low</option>
-                <option value="medium">Medium</option>
-                <option value="high">High</option>
+                <!-- Using enums for values -->
+                <option :value="ProjectPriority.Low">Low</option>
+                <option :value="ProjectPriority.Medium">Medium</option>
+                <option :value="ProjectPriority.High">High</option>
               </select>
             </div>
+          </div>
+          <!-- Date inputs -->
+          <div>
+            <label
+              :for="projectStartDateId"
+              class="mb-2 block text-sm font-medium text-gray-700"
+            >
+              Start Date
+            </label>
+            <input
+              :id="projectStartDateId"
+              v-model="form.startDate"
+              type="date"
+              class="w-full rounded-lg border border-gray-300 px-3 py-2 transition-colors focus:border-blue-500 focus:ring-2 focus:ring-blue-500"
+              :disabled="submitting"
+            />
+          </div>
+          <div>
+            <label
+              :for="projectEndDateId"
+              class="mb-2 block text-sm font-medium text-gray-700"
+            >
+              End Date
+            </label>
+            <input
+              :id="projectEndDateId"
+              v-model="form.endDate"
+              type="date"
+              class="w-full rounded-lg border border-gray-300 px-3 py-2 transition-colors focus:border-blue-500 focus:ring-2 focus:ring-blue-500"
+              :disabled="submitting"
+            />
+          </div>
+          <!-- New: Budget Input -->
+          <div>
+            <label
+              for="project-budget"
+              class="mb-2 block text-sm font-medium text-gray-700"
+            >
+              Budget (Optional)
+            </label>
+            <FormAppInput
+              id="project-budget"
+              v-model.number="form.budget"
+              type="number"
+              placeholder="e.g., 5000"
+              class="w-full"
+              :disabled="submitting"
+            />
           </div>
         </div>
 
@@ -131,53 +182,120 @@
   </div>
 </template>
 
-<script setup>
-import { ref, computed, watch, onMounted, onUnmounted } from "vue";
+<script setup lang="ts">
+import { ref, computed, watch, onMounted, onUnmounted, type Ref } from "vue";
+import { useId } from '#app';
+import { type IProject, ProjectStatus, ProjectPriority } from "~/types/project";
 
-const props = defineProps({
-  project: { type: Object, default: null },
-});
-const emit = defineEmits(["save", "cancel"]);
+const projectNameId = useId();
+const projectDescriptionId = useId();
+const projectStatusId = useId();
+const projectPriorityId = useId();
+const projectStartDateId = useId();
+const projectEndDateId = useId();
 
-const isEdit = computed(() => !!props.project);
+const props = defineProps<{
+  project: IProject | null;
+}>();
+
+const emit = defineEmits<{
+  (e: "save", projectData: Partial<IProject>): void;
+  (e: "cancel"): void;
+}>();
+
+const isEdit = computed(() => !!props.project?.id);
 const submitting = ref(false);
 
-const getInitialFormState = () => ({
+interface ProjectFormState {
+  id?: string;
+  name: string;
+  description?: string | null;
+  status: ProjectStatus;
+  priority: ProjectPriority;
+  startDate?: string | null;
+  endDate?: string | null;
+  budget?: number | null;
+}
+
+const getInitialFormState = (): ProjectFormState => ({
   name: "",
-  description: "",
-  status: "active",
-  priority: "medium",
+  description: null,
+  status: ProjectStatus.Active,
+  priority: ProjectPriority.Medium,
+  startDate: null,
+  endDate: null,
+  budget: null,
 });
 
-const form = ref(getInitialFormState());
+const form: Ref<ProjectFormState> = ref(getInitialFormState());
 
 watch(
   () => props.project,
   (newProject) => {
     if (newProject) {
-      form.value = { ...getInitialFormState(), ...newProject };
+      form.value = {
+        id: newProject.id,
+        name: newProject.name || "",
+        description: newProject.description || null,
+        status: newProject.status || ProjectStatus.Active,
+        priority: newProject.priority || ProjectPriority.Medium,
+        startDate: newProject.startDate ? new Date(newProject.startDate).toISOString().split("T")[0] : null,
+        endDate: newProject.endDate ? new Date(newProject.endDate).toISOString().split("T")[0] : null,
+        budget: newProject.budget || null,
+      };
     } else {
       form.value = getInitialFormState();
     }
   },
-  { immediate: true }
+  { immediate: true, deep: true }
 );
 
 const handleSubmit = async () => {
-  if (!form.value.name.trim() || submitting.value) return;
+   console.log('ProjectModal: handleSubmit triggered.');
+  if (!form.value.name.trim() || submitting.value) {
+    console.warn("ProjectModal: Form submission blocked due to empty name or already submitting.");
+    return;
+  }
   submitting.value = true;
   try {
-    emit("save", { ...form.value });
+    const payload: Partial<IProject> = {
+      name: form.value.name,
+      description: form.value.description?.trim() || undefined,
+      status: form.value.status,
+      priority: form.value.priority,
+      startDate: form.value.startDate ? new Date(`${form.value.startDate}T00:00:00Z`).toISOString() : undefined,
+      endDate: form.value.endDate ? new Date(`${form.value.endDate}T00:00:00Z`).toISOString() : undefined,
+      budget: form.value.budget !== null ? form.value.budget : undefined,
+    };
+
+    Object.keys(payload).forEach((key) => {
+      // @ts-ignore
+      if (payload[key] === undefined) {
+        // @ts-ignore
+        delete payload[key];
+      }
+    });
+
+    console.log("ProjectModal: Emitting 'save' event with payload:", payload);
+    emit("save", payload);
   } catch (error) {
-    console.error("Error saving project:", error);
+    console.error("ProjectModal: Error preparing project data for save:", error);
   } finally {
     submitting.value = false;
   }
 };
 
 onMounted(() => {
-  const handleEscape = (e) => e.key === "Escape" && emit("cancel");
+  const handleEscape = (e: KeyboardEvent) => {
+    if (e.key === "Escape") {
+      console.log("ProjectModal: Escape key pressed, emitting 'cancel'.");
+      emit("cancel");
+    }
+  };
   document.addEventListener("keydown", handleEscape);
-  onUnmounted(() => document.removeEventListener("keydown", handleEscape));
+  onUnmounted(() => {
+    console.log("ProjectModal: Component unmounted, removing keydown listener.");
+    document.removeEventListener("keydown", handleEscape);
+  });
 });
 </script>

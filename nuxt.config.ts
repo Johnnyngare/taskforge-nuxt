@@ -1,58 +1,74 @@
 // nuxt.config.ts
+import { defineNuxtConfig } from "nuxt/config";
+
 export default defineNuxtConfig({
   compatibilityDate: "2025-07-15",
   devtools: { enabled: true },
+  ssr: true,
 
+  // --- UPDATED ---
+  // Removed '@nuxtjs/leaflet' as we are now using a more performant
+  // composable-based approach to lazy-load the library.
   modules: [
     "@nuxt/ui",
     "@pinia/nuxt",
     "@vueuse/motion/nuxt",
-    // Removed @nuxtjs/color-mode as @nuxt/ui includes it
+    "@vueuse/nuxt",
   ],
 
   runtimeConfig: {
-    MONGODB_URI: process.env.MONGODB_URI,
-    JWT_SECRET: process.env.JWT_SECRET,
-    GOOGLE_CLIENT_ID: process.env.GOOGLE_CLIENT_ID,
-    GOOGLE_CLIENT_SECRET: process.env.GOOGLE_CLIENT_SECRET,
+    private: {
+      mongodbUri: process.env.MONGODB_URI,
+      jwtSecret: process.env.JWT_SECRET,
+      googleClientSecret: process.env.GOOGLE_CLIENT_SECRET,
+    },
     public: {
-      BASE_URL_PUBLIC: process.env.BASE_URL_PUBLIC || "http://localhost:3000",
-      GOOGLE_OAUTH_REDIRECT_URI:
+      googleClientId: process.env.GOOGLE_CLIENT_ID,
+      googleOauthRedirectUri:
         process.env.GOOGLE_OAUTH_REDIRECT_URI ||
         "http://localhost:3000/api/auth/google/callback",
+      baseUrlPublic: process.env.BASE_URL_PUBLIC || "http://localhost:3000",
     },
   },
 
   ui: {
     global: true,
     icons: ["heroicons", "simple-icons"],
-    // Use 'emerald' as primary and 'slate' as gray for Nuxt UI components.
-    // Tailwind's JIT mode will pick these up from tailwind.config.js
-    // if you define custom shades, but here we just align with defaults.
     primary: "emerald",
     gray: "slate",
   },
 
   colorMode: {
-    classSuffix: "", // No suffix needed if using `dark` class directly
+    classSuffix: "",
     preference: "system",
     fallback: "light",
     storageKey: "taskforge-color-mode",
   },
 
+  // --- UPDATED ---
+  // Removed 'leaflet/dist/leaflet.css'.
+  // The CSS is now imported directly within our LeafletMap.vue component.
+  // This ensures it's only loaded when a map is actually on the page.
   css: ["~/assets/css/main.css"],
+
+  postcss: {
+    plugins: {
+      tailwindcss: {},
+      autoprefixer: {},
+    },
+  },
 
   app: {
     head: {
       htmlAttrs: { lang: "en" },
-      title: "TaskForge - Transform Your Productivity",
+      title: "TaskForge - Master Your Day, Forge Your Future",
       meta: [
         { charset: "utf-8" },
         { name: "viewport", content: "width=device-width, initial-scale=1" },
         {
           name: "description",
           content:
-            "Revolutionary task management platform that helps you organize, prioritize, and accomplish your goals with ease.",
+            "The ultimate productivity platform designed to help you organize, prioritize, and conquer your tasks with ease.",
         },
         { name: "format-detection", content: "telephone=no" },
       ],
@@ -65,4 +81,12 @@ export default defineNuxtConfig({
       ],
     },
   },
+
+  plugins: [],
+
+  // --- REMOVED OBSOLETE CONFIGURATIONS ---
+  // The 'build' and 'vite' configurations related to '@vue-leaflet/vue-leaflet'
+  // have been removed. They were workarounds for a different library that we
+  // are no longer using. Our current composable-based approach does not
+  // require any special build or Vite configuration.
 });

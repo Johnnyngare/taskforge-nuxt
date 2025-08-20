@@ -1,8 +1,43 @@
+// tsconfig.json
 {
-  // https://nuxt.com/docs/guide/concepts/typescript
   "extends": "./.nuxt/tsconfig.json",
   "compilerOptions": {
-    "types": ["@nuxt/ui"] // Add @nuxt/ui to the types array
-  }
-  // Other configurations...
+    "skipLibCheck": true,
+    // Add 'dom' to 'lib' for browser-specific types (like navigator.geolocation, Map, etc.)
+    // Ensure 'esnext' is present for modern JS features.
+    "lib": ["esnext", "dom", "dom.iterable"],
+    "jsx": "preserve", // Keep this
+    "jsxFactory": "h", // Standard Vue 3 JSX factory if using TSX or some UI libraries
+    "esModuleInterop": true, // Recommended for better import compatibility
+    "forceConsistentCasingInFileNames": true,
+    "moduleResolution": "bundler", // Or "node", "bundler" is typical for Vite/Nuxt 3
+
+    // These `types` are for global type declarations
+    // Re-verify these, as some might be covered by @nuxtjs/leaflet
+    "types": [
+      "node",           // For 'process' global, Node.js environment types
+      "leaflet",        // For global Leaflet (L) types
+      "@nuxt/ui",       // For @nuxt/ui types
+      // IMPORTANT: DO NOT include '@nuxtjs/leaflet' here for *types*.
+      // Instead, we'll make its components globally available via `vue-shims.d.ts`
+      // and rely on direct 'import type' or global components for usage.
+    ],
+
+    // If using Vue 2 Composition API or some libraries that rely on older Vue patterns
+    // "paths": {
+    //   "vue": ["node_modules/vue/dist/vue.esm-bundler.js"] // Example for specific Vue module
+    // }
+  },
+  "include": [
+    "**/*",
+    ".nuxt/types/**/*.ts", // Nuxt generated types
+    "plugins/**/*.ts",
+    "types/**/*.d.ts" // CRITICAL: Explicitly include your custom type declaration folder
+  ],
+  "exclude": [
+    "node_modules",
+    "dist",
+    ".output",
+    ".nuxt"
+  ]
 }

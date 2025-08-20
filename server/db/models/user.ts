@@ -1,62 +1,50 @@
 // server/db/models/user.ts
-import mongoose, { Schema, Model, Document, Types } from "mongoose";
+import { Schema, model, Document } from "mongoose";
+import { UserRole } from "~/types/user";
+import type { IUser } from "~/types/user";
 
-export interface IUser extends Document {
-  email: string;
-  passwordHash?: string;
-  name: string;
-  profilePhoto?: string;
+export interface IUserModel extends Document, Omit<IUser, 'id'> {
+  password?: string;
   googleId?: string;
   createdAt: Date;
   updatedAt: Date;
-  _id: Types.ObjectId;
 }
 
-const UserSchema: Schema<IUser> = new Schema<IUser>(
+const userSchema = new Schema<IUserModel>(
   {
-    email: {
+    name: { type: String, required: true, trim: true },
+    email: { type: String, required: true, unique: true, trim: true, lowercase: true },
+    password: { type: String, required: false, select: false },
+    provider: { type: String, required: true, default: "local", enum: ["local", "google"] },
+    googleId: { type: String, unique: true, sparse: true },
+    profilePhoto: { type: String },
+    role: {
       type: String,
-      required: [true, "Email is required."],
-      unique: true,
-      lowercase: true,
-      trim: true,
-    },
-    passwordHash: {
-      type: String,
-    },
-    name: {
-      type: String,
-      required: [true, "Name is required."],
-      trim: true,
-    },
-    profilePhoto: {
-      type: String,
-      default: null,
-    },
-    googleId: {
-      type: String,
-      unique: true,
-      sparse: true,
+      enum: Object.values(UserRole),
+      required: true,
+      default: UserRole.FieldOfficer,
     },
   },
   {
     timestamps: true,
     toJSON: {
-      transform: (doc, ret: Record<string, any>) => {
-        // FIX: Type 'ret' as Record<string, any>
-        delete ret.passwordHash;
+      virtuals: true,
+      transform: (doc, ret: Record<string, any>): IUser => {
+        ret.id = ret._id.toString();
+        delete ret._id;
         delete ret.__v;
-        // Optionally, if you also transform _id to string for ret, do it here
-        if (ret._id) {
-          ret._id = ret._id.toString();
-        }
-        return ret;
+        delete ret.password;
+        ret.name = ret.name;
+        ret.email = ret.email;
+        ret.role = ret.role;
+        ret.profilePhoto = ret.profilePhoto;
+        ret.provider = ret.provider;
+        return ret as IUser;
       },
     },
-  }
+    id: true,
+  },
 );
 
-const User: Model<IUser> =
-  mongoose.models.User || mongoose.model<IUser>("User", UserSchema);
-
-export default User;
+// No explicit schema.index({ email: 1 }); needed here if `unique: true` is on the field.
+export const UserModel = model<IUserModel>("User", userSchema);

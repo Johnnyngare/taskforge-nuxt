@@ -1,29 +1,49 @@
 // server/db/models/project.ts
-import mongoose, { Schema, Document } from 'mongoose';
+import { Schema, model, Document } from "mongoose";
+import type { IProject } from "~/types/project";
+import mongoose from 'mongoose';
 
-export interface IProject extends Document {
-  name: string;
-  description?: string;
-  startDate?: Date;
-  endDate?: Date;
-  budget?: number; // Total budget
-  costSpent?: number; // Track actual spending (can be calculated or updated)
-  manager: mongoose.Types.ObjectId; // User ID of the project manager
-  members: mongoose.Types.ObjectId[]; // Array of User IDs
-  status: 'Planning' | 'Active' | 'Completed' | 'On Hold' | 'Cancelled';
-  // You might want to calculate completion percentage based on linked tasks
+export interface IProjectModel extends Document, Omit<IProject, 'id'> {
+  owner: mongoose.Types.ObjectId;
+  members: mongoose.Types.ObjectId[];
+  createdAt: Date;
+  updatedAt: Date;
 }
 
-const ProjectSchema: Schema = new Schema({
-  name: { type: String, required: true, unique: true },
-  description: { type: String },
-  startDate: { type: Date },
-  endDate: { type: Date },
-  budget: { type: Number, default: 0 },
-  costSpent: { type: Number, default: 0 },
-  manager: { type: Schema.Types.ObjectId, ref: 'User', required: true },
-  members: [{ type: Schema.Types.ObjectId, ref: 'User' }],
-  status: { type: String, enum: ['Planning', 'Active', 'Completed', 'On Hold', 'Cancelled'], default: 'Active' },
-}, { timestamps: true });
+const projectSchema = new Schema<IProjectModel>({
+  name: { type: String, required: true, trim: true },
+  description: { type: String, trim: true, default: null },
+  status: { type: String, enum: ['active', 'on_hold', 'completed', 'cancelled'], default: 'active', required: true },
+  priority: { type: String, enum: ['low', 'medium', 'high'], default: 'medium', required: true },
+  startDate: { type: Date, default: null },
+  endDate: { type: Date, default: null },
+  budget: { type: Number, default: 0 }, // Ensure default value to handle null/undefined if needed
+  owner: { type: Schema.Types.ObjectId, ref: 'User', required: true, index: true },
+  members: [{ type: Schema.Types.ObjectId, ref: 'User', index: true }],
+}, {
+  timestamps: true,
+  toJSON: {
+    virtuals: true,
+    transform: (doc, ret: Record<string, any>): IProject => {
+      ret.id = ret._id.toString();
+      delete ret._id;
+      delete ret.__v;
+      // Ensure owner and members are consistently stringified
+      if (ret.owner && typeof ret.owner === 'object' && ret.owner._id) { // Check if populated object
+        ret.owner = ret.owner._id.toString();
+      } else if (ret.owner && typeof ret.owner !== 'string') { // Check if unpopulated ObjectId
+        ret.owner = ret.owner.toString();
+      }
 
-export const ProjectModel = mongoose.model<IProject>('Project', ProjectSchema); // Changed export to named export
+      if (ret.members && Array.isArray(ret.members)) {
+        ret.members = ret.members.map((member: any) =>
+          typeof member === 'object' && member._id ? member._id.toString() : String(member)
+        );
+      }
+      return ret as IProject;
+    },
+  },
+  id: true,
+});
+
+export const ProjectModel = model('Project', projectSchema);

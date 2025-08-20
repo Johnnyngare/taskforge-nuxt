@@ -20,6 +20,7 @@
         @status-changed="handleStatusChanged"
         @edit="handleEdit"
         @delete="handleDelete"
+        @task-selected="handleTaskSelected"
       />
     </template>
   </div>
@@ -32,10 +33,12 @@ const props = defineProps<{
   tasks: ITask[];
 }>();
 
+// NEW: Add 'task-selected' to the list of events this component can emit.
 const emit = defineEmits<{
   (e: "task-updated", taskId: string, updates: Partial<ITask>): void;
   (e: "task-deleted", taskId: string): void;
   (e: "edit-task", taskId: string): void;
+  (e: "task-selected", task: ITask): void; // This is the new event
 }>();
 
 const handleStatusChanged = (taskId: string, updates: Partial<ITask>) => {
@@ -47,6 +50,12 @@ const handleEdit = (taskId: string) => {
 };
 
 const handleDelete = (taskId: string) => {
+  // CORRECTED: The original emit was "delete", but the parent expects "task-deleted".
   emit("task-deleted", taskId);
+};
+
+// NEW: This function catches the event from TaskCard and emits it up to the parent page.
+const handleTaskSelected = (task: ITask) => {
+  emit("task-selected", task);
 };
 </script>

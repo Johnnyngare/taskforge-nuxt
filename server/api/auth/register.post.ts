@@ -1,76 +1,85 @@
 // server/api/auth/register.post.ts
-import { defineEventHandler, readBody, createError } from "h3";
+import { defineEventHandler, readBody, createError, setCookie } from "h3";
 import { z } from "zod";
-import bcrypt from "bcrypt";
-import User from "~/server/db/models/user";
-import { connectDB } from "~/server/db";
+import bcrypt from "bcryptjs";
+import { UserModel } from "~/server/db/models/user";
+import { UserRole } from "~/types/user";
+import { signJwt } from "~/server/utils/jwtHelper"; 
 
-// Zod schema for registration input
-const registerInputSchema = z.object({
-  name: z.string().min(2, "Name must be at least 2 characters").trim(),
-  email: z.string().email("Invalid email address").toLowerCase().trim(),
-  password: z
-    .string()
-    .min(8, "Password must be at least 8 characters")
-    .regex(/[a-z]/, "Password must contain at least one lowercase letter")
-    .regex(/[A-Z]/, "Password must contain at least one uppercase letter")
-    .regex(/[0-9]/, "Password must contain at least one number"),
+const registerSchema = z.object({
+  name: z.string().min(1, "Name is required"),
+  email: z.string().email("Invalid email address"),
+  password: z.string().min(6, "Password must be at least 6 characters"),
 });
 
 export default defineEventHandler(async (event) => {
-  await connectDB();
-  const body = await readBody(event);
-  console.log("Registering user with body:", body);
-  // 1. Validate the request body
-  const validation = registerInputSchema.safeParse(body);
-  if (!validation.success) {
-    throw createError({
-      statusCode: 400,
-      message: "Validation failed.",
-      data: validation.error.flatten().fieldErrors,
-    });
-  }
+  const body = await readBody(event); 
+  const validatedData = registerSchema.parse(body);
 
-  // FIX: Destructure from the validated data, not the raw body
-  const { name, email, password } = validation.data;
+  // --- LOGGING ---
+  console.log("\nREGISTRATION POST REQUEST:");
+  console.log("  Incoming Name:", validatedData.name);
+  console.log("  Incoming Email:", validatedData.email);
+  console.log("  Incoming Password (plain):", validatedData.password); 
+  // --- END LOGGING ---
 
   try {
-    // 2. Check if user already exists
-    const existingUser = await User.findOne({ email });
-    console.log("Checking for existing user with email:", existingUser);
+    const existingUser = await UserModel.findOne({ email: validatedData.email });
     if (existingUser) {
+      console.log("  Registration Failure: User with this email already exists.");
       throw createError({
-        statusCode: 409, // Conflict
-        message: "A user with this email already exists.",
+        statusCode: 409, 
+        statusMessage: "User with this email already exists.",
       });
     }
 
-    // 3. Hash the password
-    const hashedPassword = await bcrypt.hash(password, 10);
+    const saltRounds = 10; // Ensure consistent salt rounds with your setup
+    const hashedPassword = await bcrypt.hash(validatedData.password, saltRounds);
+    console.log("  Hashed Password generated:", hashedPassword.substring(0, 20) + '...');
 
-    // 4. Create the new user in the database
-    const newUser = await User.create({
-      name,
-      email,
-      passwordHash: hashedPassword,
+
+    const newUser = await UserModel.create({
+      name: validatedData.name,
+      email: validatedData.email,
+      password: hashedPassword,
+      provider: "local",
+      role: UserRole.FieldOfficer, // Assign default role
     });
-    console.log("New user created:", newUser);
-    // The user's toJSON method (in the Mongoose schema) should exclude the passwordHash
-    return {
-      status: "success",
-      message: "User registered successfully!",
-      user: newUser,
-    };
+
+    console.log("  New User successfully created and saved to DB:", newUser._id);
+    console.log("  New User Role:", newUser.role);
+
+    const tokenPayload = { id: newUser.id, role: newUser.role };
+
+    const token = await signJwt(tokenPayload); 
+
+    console.log("  JWT Token Generated for new user (truncated):", token.substring(0, 30) + '...');
+
+
+    setCookie(event, "auth_token", token, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === "production",
+      sameSite: "lax",
+      maxAge: 60 * 60 * 24 * 7, // 7 days
+      path: "/",
+    });
+    console.log("  Auth cookie set for new user.");
+
+    const userResponse = newUser.toJSON();
+    delete userResponse.password;
+    console.log("  Registration POST Success: Returning sanitized user data.");
+    return userResponse;
+
   } catch (error: any) {
-    // Re-throw H3 errors (like the 409 Conflict)
-    if (error.statusCode) {
-      throw error;
+    if (error instanceof z.ZodError) {
+      console.error("  Registration Validation Error:", error.flatten().fieldErrors);
+      throw createError({
+        statusCode: 400,
+        statusMessage: "Validation failed",
+        data: error.flatten().fieldErrors,
+      });
     }
-    // Catch unexpected server errors
-    console.error("Server registration error:", error);
-    throw createError({
-      statusCode: 500,
-      message: "Failed to register user due to an unexpected server error.",
-    });
+    console.error("  Registration POST General Error (catch block):", error.message);
+    throw error;
   }
 });

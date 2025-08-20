@@ -1,3 +1,4 @@
+//pages/dashboard/settings.vue
 <template>
   <div>
     <!-- Page Header -->
@@ -132,7 +133,7 @@
 <script setup>
 import { ref } from "vue";
 
-definePageMeta({ layout: "dashboard", middleware: "auth" });
+definePageMeta({ layout: "dashboard", middleware: "02-auth" });
 useSeoMeta({
   title: "Settings - TaskForge",
   description: "Manage your account settings and preferences.",

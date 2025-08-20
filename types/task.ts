@@ -1,9 +1,8 @@
 // types/task.ts
-
 export enum TaskStatus {
   Pending = "pending",
-  Completed = "completed",
   InProgress = "in_progress",
+  Completed = "completed",
   Cancelled = "cancelled",
 }
 
@@ -14,16 +13,38 @@ export enum TaskPriority {
   Urgent = "Urgent",
 }
 
-// This is the single, definitive interface for the frontend.
-// It uses strings for IDs and dates, as received from the API's JSON response.
+// NEW: TaskType Enum
+export enum TaskType {
+  Office = "office",
+  Field = "field",
+}
+
+// NEW: GeoJSON Point structure
+export interface GeoJSONPoint {
+  type: "Point";
+  coordinates: [number, number]; // [longitude, latitude]
+}
+
+// Update the ITask interface to include new fields
 export interface ITask {
-  id: string; // Use 'id' as per our last fix
+  id: string;
   title: string;
   description?: string;
   status: TaskStatus;
   priority: TaskPriority;
-  dueDate?: string; // ISO date string
-  projectId?: string;
-  createdAt: string; // ISO date string
-  updatedAt: string; // ISO date string
+  dueDate?: string;
+  createdAt: string;
+  updatedAt: string;
+  userId: string; // The ID of the user who created the task
+  assignedTo?: string[]; // IDs of users assigned to this task
+  projectId?: string; // ID of the project this task belongs to
+  project?: {
+    id: string;
+    name: string;
+  }; // Populated project details for display
+  cost?: number; // Optional cost for the task
+
+  // NEW MAPPING FIELDS
+  taskType: TaskType; // Type of task: 'office' or 'field'
+  location?: GeoJSONPoint; // GeoJSON Point for field tasks
 }

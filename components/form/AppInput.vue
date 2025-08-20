@@ -1,3 +1,4 @@
+<!-- components/form/AppInput.vue -->
 <template>
   <div class="space-y-1">
     <label
@@ -24,6 +25,9 @@
         @focus="handleFocus"
       />
 
+      <!-- FIX: Add a slot to render child elements like the password toggle button -->
+      <slot />
+
       <div
         v-if="error"
         class="pointer-events-none absolute inset-y-0 right-0 flex items-center pr-3"
@@ -45,7 +49,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed } from "vue"; // Explicit import
+import { computed } from "vue";
 
 interface Props {
   modelValue?: string | number;
@@ -79,13 +83,13 @@ const emit = defineEmits<{
   focus: [event: FocusEvent];
 }>();
 
-const inputId = computed(
-  () => `input-${Math.random().toString(36).substr(2, 9)}`
-);
+// FIX: Use Nuxt's built-in useId() for SSR-safe unique IDs.
+// This will resolve the hydration mismatch error.
+const inputId = useId();
 
 const inputClasses = computed(() => {
   const baseClasses =
-    "block w-full rounded-md shadow-sm bg-slate-700 text-slate-200 border border-border focus:ring-emerald-500 focus:border-emerald-500 disabled:opacity-50 disabled:cursor-not-allowed placeholder-slate-400";
+    "block w-full rounded-md shadow-sm bg-slate-700 text-slate-200 border border-slate-600 focus:ring-emerald-500 focus:border-emerald-500 disabled:opacity-50 disabled:cursor-not-allowed placeholder-slate-400";
 
   const sizeClasses = {
     sm: "px-3 py-1.5 text-sm",

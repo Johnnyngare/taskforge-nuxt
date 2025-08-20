@@ -108,7 +108,11 @@ import { ref, computed, type Ref } from "vue";
 import { useTasks } from "~/composables/useTasks";
 import { TaskPriority, type ITask } from "~/types/task";
 
-definePageMeta({ layout: "dashboard", middleware: "auth" });
+definePageMeta({
+  layout: "dashboard",
+  middleware: "02-auth", // Corrected name to match file
+});
+
 useSeoMeta({
   title: "Calendar - TaskForge",
   description: "View and manage your tasks in calendar format.",
@@ -134,15 +138,21 @@ const calendarDays = computed(() => {
   const month = currentDate.value.getMonth();
   const firstDay = new Date(year, month, 1);
   const lastDay = new Date(year, month + 1, 0);
+
   const startDate = new Date(firstDay);
   startDate.setDate(startDate.getDate() - startDate.getDay());
+
   const endDate = new Date(lastDay);
   endDate.setDate(endDate.getDate() + (6 - endDate.getDay()));
 
   const days = [];
-  for (let d = new Date(startDate); d <= endDate; d.setDate(d.getDate() + 1)) {
+  for (
+    let d = new Date(startDate);
+    d <= endDate;
+    d.setDate(d.getDate() + 1)
+  ) {
     days.push({
-      date: new Date(d),
+      date: new Date(d), // Clone date to avoid mutation issues
       isCurrentMonth: d.getMonth() === month,
       isToday: d.toDateString() === new Date().toDateString(),
     });
@@ -156,14 +166,16 @@ const navigateCalendar = (direction: number) => {
   currentDate.value = newDate;
 };
 
-const goToToday = () => (currentDate.value = new Date());
+const goToToday = () => {
+  currentDate.value = new Date();
+};
 
 const getTasksForDate = (date: Date) => {
   if (!tasks.value) return [];
   const normalizedInputDate = new Date(date);
   normalizedInputDate.setHours(0, 0, 0, 0);
 
-  return tasks.value.filter((task) => {
+  return tasks.value.filter((task: ITask) => { // Explicitly type task
     if (!task.dueDate) return false;
     const taskDueDate = new Date(task.dueDate);
     if (isNaN(taskDueDate.getTime())) return false;
@@ -175,19 +187,23 @@ const getTasksForDate = (date: Date) => {
 const getTaskStyle = (task: ITask) => {
   const priorityStyles: Record<TaskPriority, string> = {
     [TaskPriority.Low]: "bg-sky-500/20 text-sky-300 hover:bg-sky-500/40",
-    [TaskPriority.Medium]:
-      "bg-amber-500/20 text-amber-300 hover:bg-amber-500/40",
-    [TaskPriority.High]:
-      "bg-orange-500/20 text-orange-300 hover:bg-orange-500/40",
+    [TaskPriority.Medium]: "bg-amber-500/20 text-amber-300 hover:bg-amber-500/40",
+    [TaskPriority.High]: "bg-orange-500/20 text-orange-300 hover:bg-orange-500/40",
     [TaskPriority.Urgent]: "bg-rose-500/20 text-rose-300 hover:bg-rose-500/40",
   };
-  return priorityStyles[task.priority] || priorityStyles.Medium;
+  return priorityStyles[task.priority] || priorityStyles[TaskPriority.Medium];
 };
 
-const openTaskDetail = (task: ITask) => (selectedTask.value = task);
+const openTaskDetail = (task: ITask) => {
+  selectedTask.value = task;
+};
 
 const handleTaskCreated = () => {
   showCreateModal.value = false;
+  // This page's tasks are managed by useTasks composable.
+  // We need to refresh the data after a new task is created.
+  // Assuming useTasks has a refresh method.
+  refresh(); 
   toast.add({ title: "Task created!", color: "green" });
 };
 
@@ -195,6 +211,8 @@ const handleSaveEdit = async (taskId: string, updates: Partial<ITask>) => {
   if (!selectedTask.value) return;
   await updateTask(taskId, updates);
   selectedTask.value = null;
+  // Refresh tasks after an edit to ensure calendar updates
+  refresh(); 
   toast.add({ title: "Task saved!", color: "green" });
 };
 </script>

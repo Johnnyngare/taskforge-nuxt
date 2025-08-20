@@ -1,17 +1,19 @@
 <!-- pages/dashboard/index.vue -->
 <template>
   <div>
+    <!-- Welcome Banner -->
     <div
       class="mb-6 rounded-xl border border-slate-700 bg-gradient-to-r from-slate-800 to-slate-900 p-6"
     >
       <h1 class="mb-2 text-2xl font-bold text-white">
-        Welcome back, {{ user?.name || "TaskForge User" }}!
+        Welcome back, {{ authUser?.name || "TaskForge User" }}!
       </h1>
       <p class="text-slate-400">
         You have {{ tasks?.length || 0 }} tasks to manage today.
       </p>
     </div>
 
+    <!-- Action Row -->
     <div
       class="mb-6 flex flex-col items-start justify-between gap-4 sm:flex-row sm:items-center"
     >
@@ -27,17 +29,18 @@
       </div>
     </div>
 
+    <!-- Quick Add -->
     <DashboardQuickAddTask
       v-if="showQuickAdd"
       @task-created="handleTaskCreated"
       @close="showQuickAdd = false"
     />
 
-    <div class="grid grid-cols-1 gap-6 lg:grid-cols-3">
+    <!-- Main Grid -->
+    <div class="grid grid-cols-1 gap-6 lg:col-span-3 lg:grid-cols-3">
+      <!-- Recent Tasks -->
       <div class="lg:col-span-2">
-        <div
-          class="rounded-xl border border-slate-700 bg-slate-800 p-6 shadow-md"
-        >
+        <div class="rounded-xl border border-slate-700 bg-slate-800 p-6 shadow-md">
           <div class="mb-6 flex items-center justify-between">
             <h2 class="text-xl font-semibold text-slate-200">Recent Tasks</h2>
             <NuxtLink
@@ -50,26 +53,34 @@
 
           <div v-if="pending" class="flex justify-center py-8">
             <UiSpinner class="h-6 w-6 text-emerald-500" />
+            <p class="ml-2 text-emerald-500">Loading tasks...</p>
           </div>
 
           <div v-else-if="error" class="py-8 text-center">
             <p class="mb-4 text-rose-400">Failed to load tasks</p>
-            <FormAppButton @click="() => refresh()" variant="secondary">
+            <FormAppButton @click="refresh" variant="secondary">
               Try Again
             </FormAppButton>
           </div>
 
           <TaskList
             v-else
-            :tasks="tasks ? tasks.slice(0, 6) : []"
+            :tasks="Array.isArray(tasks) ? tasks.slice(0, 6) : []"
+            :selected-task-id="selectedTaskId"
             @task-updated="handleTaskUpdate"
             @task-deleted="handleTaskDelete"
             @edit-task="handleEditTask"
+            @task-selected="handleTaskSelect"
           />
         </div>
       </div>
 
+      <!-- Sidebar -->
       <div class="space-y-6">
+        <!-- Field Task Map with a template ref -->
+        <DashboardFieldTasksMap ref="fieldMapRef" :tasks="tasks" />
+
+        <!-- Productivity Stats -->
         <div class="rounded-xl border border-slate-700 bg-slate-800 p-6">
           <h3 class="mb-4 text-lg font-semibold text-slate-200">
             Productivity Stats
@@ -90,6 +101,7 @@
           </div>
         </div>
 
+        <!-- Upcoming Deadlines -->
         <div class="rounded-xl border border-slate-700 bg-slate-800 p-6">
           <h3 class="mb-4 text-lg font-semibold text-slate-200">
             Upcoming Deadlines
@@ -113,6 +125,7 @@
       </div>
     </div>
 
+    <!-- Edit Modal -->
     <TaskEditModal
       v-if="editingTask"
       :task="editingTask"
@@ -123,14 +136,20 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, type Ref } from "vue";
+import { ref, computed, type Ref, watch } from "vue";
 import { useTasks } from "~/composables/useTasks";
 import { useAuth } from "~/composables/useAuth";
-import { type ITask, TaskStatus } from "~/types/task";
+import { type ITask, TaskStatus, TaskType } from "~/types/task";
+import { useToast } from 'vue-toastification';
+import { useCookie } from '#app';
+
+import DashboardFieldTasksMap from '~/components/dashboard/DashboardFieldTasksMap.vue';
+import DashboardQuickAddTask from '~/components/dashboard/QuickAddTask.vue';
+import TaskEditModal from '~/components/TaskEditModal.vue';
 
 definePageMeta({
   layout: "dashboard",
-  middleware: "auth",
+  middleware: "02-auth",
 });
 
 useSeoMeta({
@@ -139,65 +158,79 @@ useSeoMeta({
 });
 
 const { tasks, pending, error, refresh, updateTask, deleteTask } = useTasks();
-const { user } = useAuth();
+const { user: authUser, isAuthenticated, initialized } = useAuth();
 const toast = useToast();
+const authTokenCookie = useCookie('auth_token');
 
-const showQuickAdd = ref(false);
+// --- DEBUGGING WATCHER ---
+// This will log the full task data to the console whenever it changes.
+// You can inspect the 'taskType' and 'location' properties here.
+watch(tasks, (newTasks) => {
+  if (newTasks && newTasks.length > 0) {
+    console.log("Tasks loaded on dashboard:", JSON.stringify(newTasks, null, 2));
+  }
+}, { immediate: true });
+
+// --- INTERACTIVITY STATE & REFS ---
+const fieldMapRef = ref<InstanceType<typeof DashboardFieldTasksMap> | null>(null);
+const selectedTaskId = ref<string | null>(null);
+const showQuickAdd: Ref<boolean> = ref(false);
 const editingTask: Ref<ITask | null> = ref(null);
 
-const completedTasksCount = computed(
-  () =>
-    tasks.value?.filter((task) => task.status === TaskStatus.Completed)
-      .length || 0
+// --- AUTH & DATA FETCHING ---
+watch([isAuthenticated, initialized, () => authUser.value?.id, authTokenCookie], ([isAuth, isInit, userId, token]) => {
+  if (isInit && isAuth && userId && token) {
+    if (!tasks.value?.length && !pending.value || error.value) {
+        setTimeout(() => {
+            refresh();
+        }, 200);
+    }
+  }
+}, { immediate: true });
+
+// --- COMPUTED PROPERTIES ---
+const completedTasksCount = computed(() =>
+  Array.isArray(tasks.value)
+    ? tasks.value.filter((task: ITask) => task.status === TaskStatus.Completed).length
+    : 0
 );
 
-const pendingTasksCount = computed(
-  () =>
-    tasks.value?.filter((task) => task.status === TaskStatus.Pending).length ||
-    0
+const pendingTasksCount = computed(() =>
+  Array.isArray(tasks.value)
+    ? tasks.value.filter((task: ITask) => task.status === TaskStatus.Pending).length
+    : 0
 );
 
 const upcomingTasks = computed(() => {
-  if (!tasks.value) return [];
+  if (!Array.isArray(tasks.value)) return [];
   const now = new Date();
   return tasks.value
-    .filter((task) => {
-      if (!task.dueDate) return false;
-      const dueDate = new Date(task.dueDate);
-      return !isNaN(dueDate.getTime()) && dueDate > now;
-    })
-    .sort((a, b) => {
-      const dateA = new Date(a.dueDate as string);
-      const dateB = new Date(b.dueDate as string);
-      if (isNaN(dateA.getTime()) || isNaN(dateB.getTime())) return 0;
-      return dateA.getTime() - dateB.getTime();
-    });
+    .filter((task: ITask) => task.dueDate && new Date(task.dueDate) > now)
+    .sort((a: ITask, b: ITask) => new Date(a.dueDate!).getTime() - new Date(b.dueDate!).getTime());
 });
+
+// --- EVENT HANDLERS ---
+const handleTaskSelect = (task: ITask) => {
+  if (task.taskType === TaskType.Field && fieldMapRef.value) {
+    fieldMapRef.value.focusOnTask(task);
+    selectedTaskId.value = task.id;
+  }
+};
 
 const handleTaskCreated = () => {
   showQuickAdd.value = false;
-  toast.add({
-    title: "Task created!",
-    icon: "i-heroicons-check-circle",
-    color: "green",
-  });
+  selectedTaskId.value = null; // Clear selection on refresh
+  refresh();
+  toast.success("Task created successfully!");
 };
 
 const handleTaskUpdate = async (taskId: string, updates: Partial<ITask>) => {
   try {
     await updateTask(taskId, updates);
-    toast.add({
-      title: "Task updated!",
-      icon: "i-heroicons-check-circle",
-      color: "green",
-    });
+    refresh();
+    toast.success("Task updated!");
   } catch (err: any) {
-    toast.add({
-      title: "Error updating task",
-      description: err.data?.message || "An unexpected error occurred.",
-      icon: "i-heroicons-exclamation-triangle",
-      color: "red",
-    });
+    toast.error(`Error updating task: ${err.data?.message}`);
   }
 };
 
@@ -205,53 +238,30 @@ const handleTaskDelete = async (taskId: string) => {
   if (!confirm("Are you sure you want to delete this task?")) return;
   try {
     await deleteTask(taskId);
-    toast.add({
-      title: "Task deleted!",
-      icon: "i-heroicons-trash",
-      color: "orange",
-    });
+    refresh();
+    toast.info("Task deleted!");
   } catch (err: any) {
-    toast.add({
-      title: "Error deleting task",
-      description: err.data?.message || "An unexpected error occurred.",
-      icon: "i-heroicons-exclamation-triangle",
-      color: "red",
-    });
+    toast.error(`Error deleting task: ${err.data?.message}`);
   }
 };
 
 const handleEditTask = (taskId: string) => {
-  // FIX: Find by 'id' instead of '_id'
-  const foundTask = tasks.value?.find((t) => t.id === taskId);
-  if (foundTask) {
-    editingTask.value = foundTask;
-  }
+  const foundTask = Array.isArray(tasks.value) ? tasks.value.find((t: ITask) => t.id === taskId) : undefined;
+  if (foundTask) editingTask.value = foundTask;
 };
 
 const handleSaveEdit = async (taskId: string, updatedData: Partial<ITask>) => {
   try {
     await updateTask(taskId, updatedData);
     editingTask.value = null;
-    toast.add({
-      title: "Task saved!",
-      icon: "i-heroicons-check-circle",
-      color: "green",
-    });
+    refresh();
+    toast.success("Task saved!");
   } catch (err: any) {
-    toast.add({
-      title: "Error saving task",
-      description: err.data?.message || "An unexpected error occurred.",
-      icon: "i-heroicons-exclamation-triangle",
-      color: "red",
-    });
+    toast.error(`Error saving task: ${err.data?.message}`);
   }
 };
 
-const formatDate = (dateString?: string) => {
-  if (!dateString) return "";
-  return new Date(dateString).toLocaleDateString("en-US", {
-    month: "short",
-    day: "numeric",
-  });
-};
+// --- UTILITY FUNCTIONS ---
+const formatDate = (dateString?: string) =>
+  dateString ? new Date(dateString).toLocaleDateString("en-US", { month: "short", day: "numeric" }) : "";
 </script>
