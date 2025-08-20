@@ -16,6 +16,7 @@
     </div>
 
     <form @submit.prevent="submitTask" class="space-y-4">
+      <!-- Form fields remain the same -->
       <div>
         <label
           for="quick-title"
@@ -164,10 +165,6 @@
             Selected: Lat {{ form.location.coordinates[1].toFixed(4) }}, Lng
             {{ form.location.coordinates[0].toFixed(4) }}
           </p>
-          <!--
-            UPDATED: The UiLeafletMap component is now just a container.
-            The marker logic is handled programmatically in the script below.
-          -->
           <UiLeafletMap
             height="300px"
             :zoom="initialMapZoom"
@@ -213,19 +210,17 @@ import {
 } from "~/types/task";
 import { useToast } from "vue-toastification";
 import UiLeafletMap from "~/components/ui/LeafletMap.vue";
-// --- UPDATED: Import our new composable ---
 import { useLeaflet } from "~/composables/useLeaflet";
 import type {
   Map as LeafletMapInstance,
   LatLngExpression,
   LeafletMouseEvent,
-  Marker as LeafletMarker, // Import Marker type
+  Marker as LeafletMarker,
 } from "leaflet";
 
 const { createTask } = useTasks();
 const { projects, pending: projectsPending, error: projectsError } = useProjects();
 const toast = useToast();
-// --- UPDATED: Get Leaflet library via the composable. It's a Ref now. ---
 const { leaflet: L } = useLeaflet();
 
 const emit = defineEmits<{
@@ -259,15 +254,14 @@ const form = ref<QuickAddForm>({
 
 const today = computed(() => new Date().toISOString().split("T")[0]);
 
-// --- Map Related State and Functions ---
 const mapInstance = ref<LeafletMapInstance | null>(null);
-const locationMarker = ref<LeafletMarker | null>(null); // Ref to hold the marker instance
+const locationMarker = ref<LeafletMarker | null>(null);
 const initialMapZoom = 13;
 const initialMapCenter = ref<LatLngExpression>([51.505, -0.09]);
 
+// --- UPDATED with robust error handling ---
 const onMapReady = (map: LeafletMapInstance) => {
   mapInstance.value = map;
-  // Geolocation logic remains the same
   if (navigator.geolocation) {
     navigator.geolocation.getCurrentPosition(
       (position) => {
@@ -276,23 +270,20 @@ const onMapReady = (map: LeafletMapInstance) => {
         initialMapCenter.value = [lat, lng];
         map.setView([lat, lng], initialMapZoom);
       },
-      (error) => console.warn("Geolocation error:", error.message)
+      (error) => {
+        console.warn(`Geolocation error: ${error.message}. Using default map center.`);
+      }
     );
+  } else {
+    console.warn("Geolocation is not supported by this browser.");
   }
 };
 
-// --- UPDATED: New function to handle map clicks ---
 const handleMapClick = (e: LeafletMouseEvent) => {
   if (!L.value || !mapInstance.value) return;
-
   const coords: [number, number] = [e.latlng.lng, e.latlng.lat];
-  // Update the form state directly
-  form.value.location = {
-    type: "Point",
-    coordinates: coords,
-  };
+  form.value.location = { type: "Point", coordinates: coords };
 
-  // Add or move the marker for visual feedback
   if (!locationMarker.value) {
     locationMarker.value = L.value.marker(e.latlng).addTo(mapInstance.value);
   } else {
@@ -303,14 +294,12 @@ const handleMapClick = (e: LeafletMouseEvent) => {
     .openPopup();
 };
 
-// --- UPDATED: Watcher to attach click listener when map and Leaflet are ready ---
 watch([mapInstance, L], ([map, leaflet]) => {
   if (map && leaflet) {
     map.on("click", handleMapClick);
   }
 });
 
-// --- UPDATED: Watcher to clear location and REMOVE MARKER ---
 watch(
   () => form.value.taskType,
   (newType) => {
@@ -334,6 +323,7 @@ const submitTask = async () => {
 
   submitting.value = true;
   try {
+    // The taskData object is already correctly structured for the updated API
     const taskData: Partial<ITask> = {
       title: form.value.title.trim(),
       description: form.value.description.trim() || undefined,
@@ -352,7 +342,6 @@ const submitTask = async () => {
     emit("task-created");
     toast.success("Task created successfully!");
 
-    // --- UPDATED: Reset form and also remove the marker ---
     form.value = {
       title: "",
       description: "",

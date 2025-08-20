@@ -2,10 +2,14 @@
 <template>
   <div
     ref="cardRef"
+    @click="selectTask"
+    :class="{
+      'cursor-pointer': task.taskType === TaskType.Field,
+    }"
     class="group rounded-xl border border-slate-700 bg-slate-800 p-4 shadow-md transition-all duration-200 hover:border-emerald-500"
   >
     <div class="flex items-start justify-between">
-      <div class="flex-1 min-w-0">
+      <div class="min-w-0 flex-1">
         <h3
           class="truncate font-medium text-slate-200 transition-colors group-hover:text-emerald-400"
         >
@@ -30,7 +34,7 @@
           class="absolute right-0 top-8 z-10 w-48 rounded-lg border border-slate-700 bg-slate-800 py-1 shadow-lg animate-in fade-in duration-200"
         >
           <button
-            @click="handleStatusToggle"
+            @click.stop="handleStatusToggle"
             class="flex w-full items-center gap-2 px-4 py-2 text-left text-sm text-slate-200 transition-colors hover:bg-slate-700"
           >
             <Icon
@@ -48,7 +52,7 @@
             }}
           </button>
           <button
-            @click="handleEdit"
+            @click.stop="handleEdit"
             class="flex w-full items-center gap-2 px-4 py-2 text-left text-sm text-slate-200 transition-colors hover:bg-slate-700"
           >
             <Icon name="heroicons:pencil" class="h-4 w-4" />
@@ -56,7 +60,7 @@
           </button>
           <hr class="my-1 border-slate-700" />
           <button
-            @click="handleDelete"
+            @click.stop="handleDelete"
             class="flex w-full items-center gap-2 px-4 py-2 text-left text-sm text-rose-400 transition-colors hover:bg-rose-600"
           >
             <Icon name="heroicons:trash" class="h-4 w-4" />
@@ -78,7 +82,6 @@
         ></span>
         {{ statusLabel }}
       </span>
-      <!-- NEW: Display Project Name -->
       <span
         v-if="task.project"
         class="inline-flex items-center rounded-full bg-blue-500/10 px-2 py-1 text-xs font-medium text-blue-400"
@@ -86,7 +89,6 @@
         <Icon name="heroicons:folder" class="mr-1.5 h-3 w-3" />
         {{ task.project.name }}
       </span>
-      <!-- NEW: Display Task Cost -->
       <span
         v-if="typeof task.cost === 'number'"
         class="inline-flex items-center rounded-full bg-purple-500/10 px-2 py-1 text-xs font-medium text-purple-400"
@@ -118,16 +120,19 @@
 <script setup lang="ts">
 import { ref, computed } from "vue";
 import { onClickOutside } from "@vueuse/core";
-import { TaskStatus, type ITask } from "~/types/task";
+// NEW: Import TaskType to check against it
+import { TaskStatus, TaskType, type ITask } from "~/types/task";
 
 const props = defineProps<{
   task: ITask;
 }>();
 
+// NEW: Add 'task-selected' to the list of defined emits
 const emit = defineEmits<{
   (e: "edit", id: string): void;
   (e: "delete", id: string): void;
   (e: "status-changed", id: string, updates: { status: TaskStatus }): void;
+  (e: "task-selected", task: ITask): void;
 }>();
 
 const showDropdown = ref(false);
@@ -136,6 +141,14 @@ const cardRef = ref<HTMLElement | null>(null);
 onClickOutside(cardRef, () => {
   showDropdown.value = false;
 });
+
+// NEW: This function is called when the main card area is clicked
+const selectTask = () => {
+  // Only emit the event if the task is a Field task
+  if (props.task.taskType === TaskType.Field) {
+    emit("task-selected", props.task);
+  }
+};
 
 const statusInfo = computed(() => {
   const statuses: Record<
@@ -188,13 +201,11 @@ const dueDateClasses = computed(() => {
 const toggleDropdown = () => (showDropdown.value = !showDropdown.value);
 
 const handleEdit = () => {
-  console.log("TaskCard: Emitting 'edit' for task ID:", props.task.id);
   emit("edit", props.task.id);
   showDropdown.value = false;
 };
 
 const handleDelete = () => {
-  console.log("TaskCard: Emitting 'delete' for task ID:", props.task.id);
   emit("delete", props.task.id);
   showDropdown.value = false;
 };
@@ -204,7 +215,6 @@ const handleStatusToggle = () => {
     props.task.status === TaskStatus.Completed
       ? TaskStatus.Pending
       : TaskStatus.Completed;
-  console.log("TaskCard: Emitting 'status-changed' for task ID:", props.task.id, "new status:", newStatus);
   emit("status-changed", props.task.id, { status: newStatus });
   showDropdown.value = false;
 };
