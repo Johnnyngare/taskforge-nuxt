@@ -133,7 +133,7 @@
 <script setup>
 import { ref } from "vue";
 
-definePageMeta({ layout: "dashboard", middleware: "02-auth" });
+definePageMeta({ layout: "dashboard" });
 useSeoMeta({
   title: "Settings - TaskForge",
   description: "Manage your account settings and preferences.",

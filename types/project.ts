@@ -1,31 +1,39 @@
 // types/project.ts
+import type { ITask } from '~/types/task'; // THE FIX: Added 'type' keyword here
+
 export enum ProjectStatus {
-  Active = "active",
-  OnHold = "on_hold",
-  Completed = "completed",
-  Cancelled = "cancelled",
+  Active = 'active',
+  Completed = 'completed',
+  OnHold = 'on_hold',
+  Cancelled = 'cancelled',
 }
 
 export enum ProjectPriority {
-  Low = "low",
-  Medium = "medium",
-  High = "high",
+  Low = 'low',
+  Medium = 'medium',
+  High = 'high',
 }
 
 export interface IProject {
   id: string;
   name: string;
-  description?: string | null;
-  startDate?: string | null;
-  endDate?: string | null;
+  description?: string;
+  status: ProjectStatus;
+  priority: ProjectPriority;
+  startDate?: string;
+  endDate?: string;
   budget?: number;
-  owner: string;
-  members?: string[];
+  owner: string; // User ID of the owner
+  members?: string[]; // Array of User IDs
   createdAt: string;
   updatedAt: string;
+
+  // Fields for project aggregation (calculated on backend)
   totalTasks?: number;
   completedTasks?: number;
-  completionRate?: number;
-  status?: ProjectStatus;
-  priority?: ProjectPriority;
+  completionRate?: number; // 0-100 percentage
+  totalTasksCost?: number;
+
+  // Associated tasks when fetching a single project detail
+  tasks?: ITask[]; // Array of ITask objects
 }

@@ -4,7 +4,6 @@ export enum UserRole {
   TeamManager = "manager", // Ensure this matches the string used in DB/JWT
   FieldOfficer = "field_officer",
   Dispatcher = "dispatcher",
-  Viewer = "viewer" // Add if you have this role
 }
 
 export interface IUser {
