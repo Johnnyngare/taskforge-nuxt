@@ -111,7 +111,7 @@ import { useProjects } from "~/composables/useProjects";
 import { ProjectStatus, ProjectPriority, type IProject } from "~/types/project";
 import { navigateTo } from '#app';
 
-definePageMeta({ layout: "dashboard", middleware: "02-auth" });
+definePageMeta({ layout: "dashboard" });
 useSeoMeta({
   title: "Projects - TaskForge",
   description: "Manage your projects and organize your work.",

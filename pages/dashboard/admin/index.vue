@@ -23,7 +23,7 @@
 // If you rename it to `auth.ts`, then use "auth".
 definePageMeta({
   layout: 'dashboard',
-  middleware: ['02-auth', 'admin']
+  middleware: ['admin']
 })
 
 useSeoMeta({

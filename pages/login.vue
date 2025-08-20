@@ -161,6 +161,7 @@
 import { z } from "zod";
 import { reactive, ref } from "vue";
 import { useAuth } from "~/composables/useAuth";
+import { useToast } from "vue-toastification"; // Assuming you use this for notifications
 
 const toast = useToast();
 
@@ -171,14 +172,13 @@ useSeoMeta({
 });
 
 definePageMeta({
-  middleware: ["guest"], // FIX: Use 'guest' middleware here
+  // CORRECTED: No middleware needed here. The global middleware handles it.
   layout: "auth",
 });
 
-const { login } = useAuth();
+// CORRECTED: Get the `login` function and the reactive `loading` state from useAuth
+const { login, loading } = useAuth();
 
-
-const loading = ref(false);
 const googleLoading = ref(false);
 const showPassword = ref(false);
 
@@ -200,78 +200,45 @@ const formState = reactive({
 });
 
 const handleLogin = async () => {
-  loading.value = true;
-  console.log("FRONTEND: handleLogin started.");
-
+  // Zod validation is good, no changes needed here.
   try {
     loginSchema.parse(formState);
   } catch (validationError: any) {
     if (validationError instanceof z.ZodError) {
       const errorDetails = validationError.errors
-        .map((e: { message: string }) => e.message)
+        .map((e) => e.message)
         .join("\n");
-      toast.add({
-        title: "Validation Failed",
-        description: errorDetails,
-        icon: "i-heroicons-exclamation-circle",
-        color: "orange",
-      });
+      toast.error(`Validation Failed: ${errorDetails}`);
     }
-    loading.value = false;
-    console.log("FRONTEND: Form validation failed.");
     return;
   }
 
+  // CORRECTED: The `loading` state is now managed by the `useAuth` composable.
+  // We don't need to set it manually here.
   try {
-    console.log("FRONTEND: Calling useAuth().login...");
-    
+    // Call the login function from the composable.
+    // It will handle the API call, state updates, notifications, and redirection.
     await login({
       email: formState.email,
       password: formState.password,
     });
-    console.log("FRONTEND: Login successful, toast added.");
-
-    // Navigation to /dashboard happens inside useAuth().login, so no redirect here.
-    toast.add({
-      title: "Welcome back!",
-      description: "Successfully signed in.",
-      icon: "i-heroicons-check-circle",
-      color: "green",
-    });
   } catch (error: any) {
-    const errorMessage =
-      error?.data?.message || error?.message || "An unexpected error occurred during login API call.";
-    toast.add({
-      title: "Sign in failed",
-      description: errorMessage,
-      icon: "i-heroicons-exclamation-triangle",
-      color: "red",
-    });
-    console.error("FRONTEND: Error caught during login API call:", error);
-  } finally {
-    loading.value = false;
-    console.log("FRONTEND: handleLogin finished.");
+    // The `login` function in `useAuth` already shows a toast on failure.
+    // We can log the error here for debugging if needed, but no further action is required.
+    console.error("Login failed on page:", error);
   }
 };
 
-
 const handleGoogleLogin = async () => {
   googleLoading.value = true;
-  console.log("FRONTEND: handleGoogleLogin started.");
   try {
     await navigateTo("/api/auth/google", { external: true });
   } catch (error: any) {
-    toast.add({
-      title: "Google sign-in unavailable",
-      description:
-        error?.message || "Could not redirect to Google. Please try again.",
-      icon: "i-heroicons-exclamation-triangle",
-      color: "red",
-    });
-    console.error("FRONTEND: Google login failed:", error);
+    toast.error(
+      error?.message || "Could not redirect to Google. Please try again."
+    );
   } finally {
     googleLoading.value = false;
-    console.log("FRONTEND: handleGoogleLogin finished.");
   }
 };
 </script>

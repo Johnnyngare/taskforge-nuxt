@@ -63,7 +63,6 @@ import { type ITask } from "~/types/task";
 
 definePageMeta({
   layout: "dashboard",
-  middleware: "02-auth", // FIX: Changed from "auth" to "02-auth"
 });
 
 useSeoMeta({

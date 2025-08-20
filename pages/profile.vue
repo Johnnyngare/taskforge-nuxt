@@ -9,6 +9,5 @@
 <script setup>
 // This tells Nuxt to run the 'auth' middleware before rendering this page
 definePageMeta({
-  middleware: "02-auth",
 });
 </script>

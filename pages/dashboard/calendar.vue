@@ -110,7 +110,6 @@ import { TaskPriority, type ITask } from "~/types/task";
 
 definePageMeta({
   layout: "dashboard",
-  middleware: "02-auth", // Corrected name to match file
 });
 
 useSeoMeta({

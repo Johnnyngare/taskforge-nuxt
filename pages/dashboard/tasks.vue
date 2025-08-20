@@ -111,7 +111,6 @@ import TaskEditModal from '~/components/TaskEditModal.vue'; // Corrected path
 
 definePageMeta({
   layout: "dashboard",
-  middleware: "02-auth",
 });
 
 useSeoMeta({
