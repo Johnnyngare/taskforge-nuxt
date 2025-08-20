@@ -2,7 +2,7 @@
 import { computed, readonly } from 'vue';
 import { useCookie, navigateTo, useState, useRequestHeaders } from '#app';
 import { useNotifier } from '~/composables/useNotifier';
-import type { IUser } from '~/types/user';
+import type { IUser } from '~/types/user'; // Ensure IUser is correctly defined
 
 export const useAuth = () => {
   const user = useState<IUser | null>('user', () => null);
@@ -12,6 +12,19 @@ export const useAuth = () => {
   const isAuthenticated = computed(() => !!user.value);
   const isAdmin = computed(() => user.value?.role === 'admin');
   const isManager = computed(() => user.value?.role === 'manager');
+  // Add other roles if they exist in your IUser interface and you want to check them
+  // const isFieldOfficer = computed(() => user.value?.role === 'field_officer');
+  // const isDispatcher = computed(() => user.value?.role === 'dispatcher');
+
+  // --- THE FIX IS HERE ---
+  // Define a computed property that determines if the user can manage SOPs.
+  // Adjust the roles included here based on your actual permissions for SOPs.
+  const canManageSOPs = computed(() =>
+    isAdmin.value ||
+    isManager.value ||
+    user.value?.role === 'dispatcher' // Include 'dispatcher' role for SOP management
+    // Add other roles that should manage SOPs, e.g., || user.value?.role === 'another_sop_manager_role'
+  );
 
   const clearUser = () => {
     user.value = null;
@@ -80,6 +93,7 @@ export const useAuth = () => {
     isAuthenticated,
     isAdmin,
     isManager,
+    canManageSOPs, // --- NEW: Expose this computed property ---
     login,
     logout,
     fetchUser,

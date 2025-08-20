@@ -3,7 +3,8 @@
   <div>
     <div class="flex items-center justify-between">
       <h1 class="text-3xl font-bold text-slate-200">Learning & SOPs</h1>
-      <FormAppButton v-if="canManage" @click="openCreateModal">
+      <!-- THE FIX: Use canManageSOPs directly for the button visibility -->
+      <FormAppButton v-if="canManageSOPs" @click="openCreateModal">
         <Icon name="heroicons:plus" class="mr-2 h-4 w-4" />
         Add New SOP
       </FormAppButton>
@@ -23,6 +24,9 @@
           class="mx-auto h-12 w-12 opacity-50"
         />
         <h3 class="mt-4 text-lg font-semibold">No SOPs Found</h3>
+        <p class="mt-1 text-sm">
+          Get started by creating the first Standard Operating Procedure.
+        </p>
       </div>
       <ul v-else class="divide-y divide-slate-700">
         <li v-for="sop in sops" :key="sop.id" class="group p-4">
@@ -44,7 +48,8 @@
                 class="rounded-full bg-slate-700 px-2 py-1 text-xs font-medium text-slate-300"
                 >{{ sop.category }}</span
               >
-              <div v-if="canManage" class="flex">
+              <!-- THE FIX: Use canManageSOPs for conditional display of CRUD buttons -->
+              <div v-if="canManageSOPs" class="flex">
                 <button
                   @click="openEditModal(sop)"
                   class="p-1 text-slate-400 hover:text-white"
@@ -71,10 +76,6 @@
   </div>
 </template>
 
-// pages/dashboard/learning/index.vue
-
-
-
 <script setup lang="ts">
 import { ref, computed } from 'vue';
 import { useSops } from '~/composables/useSops';
@@ -86,11 +87,12 @@ definePageMeta({
   layout: 'dashboard',
 });
 
-// useAsyncData is now called inside useSops, so we just consume the results.
 const { sops, pending, error, deleteSop } = useSops();
-const { isAdmin, isManager } = useAuth();
+// THE FIX: Destructure canManageSOPs directly from useAuth
+const { isAdmin, isManager, canManageSOPs } = useAuth();
 
-const canManage = computed(() => isAdmin.value || isManager.value);
+// Removed the local 'canManage' computed property as 'canManageSOPs' is now directly available.
+// const canManage = computed(() => isAdmin.value || isManager.value);
 
 const isModalOpen = ref(false);
 const editingSop = ref<ISop | null>(null);
@@ -104,7 +106,4 @@ const openEditModal = (sop: ISop) => {
   editingSop.value = sop;
   isModalOpen.value = true;
 };
-
-// No need to call `await fetchSops()` here anymore.
-// The composable and middleware handle the timing perfectly.
 </script>
