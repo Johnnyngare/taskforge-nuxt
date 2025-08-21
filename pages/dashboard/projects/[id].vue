@@ -90,8 +90,7 @@
       <div class="mt-8">
         <h2 class="text-xl font-semibold text-slate-200">Tasks in this Project</h2>
         <div v-if="project.tasks && project.tasks.length > 0">
-          <!-- Pass the `tasks` array received from the API -->
-          <TaskList :tasks="project.tasks" />
+          <TaskList :tasks="project.tasks" :selected-task-id="null" /> <!-- Pass null -->
         </div>
         <div v-else class="mt-4 rounded-lg border border-dashed border-slate-700 p-8 text-center text-slate-500">
           <p>No tasks have been added to this project yet.</p>
@@ -126,11 +125,10 @@ const {
     if (!projectId.value) {
       return Promise.resolve(null);
     }
-    // The API call now returns the IProject object directly, including tasks.
     return api<IProject>(`/projects/${projectId.value}`);
   },
   {
-    default: () => null, // Set a default of null to better handle initial loading/error
+    default: () => null,
     watch: [projectId],
   }
 );
@@ -141,7 +139,6 @@ useSeoMeta({
   ),
 });
 
-// Helper functions
 const formatRelativeDate = (dateString: string) => {
   const date = new Date(dateString);
   if (isNaN(date.getTime())) return "";

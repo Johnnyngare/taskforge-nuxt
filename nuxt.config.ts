@@ -1,4 +1,3 @@
-// nuxt.config.ts
 import { defineNuxtConfig } from "nuxt/config";
 
 export default defineNuxtConfig({
@@ -6,9 +5,6 @@ export default defineNuxtConfig({
   devtools: { enabled: true },
   ssr: true,
 
-  // --- UPDATED ---
-  // Removed '@nuxtjs/leaflet' as we are now using a more performant
-  // composable-based approach to lazy-load the library.
   modules: [
     "@nuxt/ui",
     "@pinia/nuxt",
@@ -28,9 +24,20 @@ export default defineNuxtConfig({
         process.env.GOOGLE_OAUTH_REDIRECT_URI ||
         "http://localhost:3000/api/auth/google/callback",
       baseUrlPublic: process.env.BASE_URL_PUBLIC || "http://localhost:3000",
+      uploadsBaseUrl: process.env.UPLOADS_BASE_URL || "http://localhost:3000/uploads",
     },
   },
-
+  // --- FIX 1: Add missing comma after runtimeConfig block ---
+  // --- Also, this comment syntax is cleaner here ---
+  nitro: {
+    publicAssets: [
+      {
+        baseURL: '/uploads', // This URL path will serve files from
+        dir: './uploads',     // This local directory
+        maxAge: 60 * 60 * 24 * 365, // Cache for 1 year
+      }
+    ]
+  }, // <-- CRITICAL: COMMA ADDED HERE
   ui: {
     global: true,
     icons: ["heroicons", "simple-icons"],
@@ -45,11 +52,11 @@ export default defineNuxtConfig({
     storageKey: "taskforge-color-mode",
   },
 
-  // --- UPDATED ---
-  // Removed 'leaflet/dist/leaflet.css'.
-  // The CSS is now imported directly within our LeafletMap.vue component.
-  // This ensures it's only loaded when a map is actually on the page.
-  css: ["~/assets/css/main.css"],
+  // --- FIX 2: Re-add leaflet.css to global CSS array ---
+  css: [
+    "~/assets/css/main.css",
+    "leaflet/dist/leaflet.css", // <-- CRITICAL: ADDED THIS BACK
+  ],
 
   postcss: {
     plugins: {

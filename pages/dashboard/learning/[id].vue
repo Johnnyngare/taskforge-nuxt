@@ -17,7 +17,6 @@
         <span v-for="tag in sop.tags" :key="tag" class="rounded-full bg-slate-700 px-2 py-1 text-xs">{{ tag }}</span>
       </div>
       <hr />
-      <!-- Using v-html is okay if you trust the source, or use a Markdown renderer -->
       <div v-html="sop.content.replace(/\n/g, '<br />')"></div>
     </div>
     <div class="mt-6">
@@ -29,6 +28,7 @@
 <script setup lang="ts">
 import { useApi } from '~/composables/useApi';
 import type { ISop } from '~/types/sop';
+import { useRoute, useAsyncData } from '#app'; // ADDED: useRoute and useAsyncData from #app
 
 const route = useRoute();
 const api = useApi();
