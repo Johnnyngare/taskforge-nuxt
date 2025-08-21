@@ -1,8 +1,7 @@
 // composables/useLeaflet.ts
-
+// This file is correct and requires no changes.
 import { ref, onMounted } from 'vue';
 
-// A flag to ensure we only run the icon setup logic once.
 let isLeafletInitialized = false;
 
 export function useLeaflet() {
@@ -10,10 +9,9 @@ export function useLeaflet() {
 
   onMounted(async () => {
     if (process.client) {
-      // Dynamically import Leaflet only on the client-side
       const L = await import('leaflet');
+      import('leaflet/dist/leaflet.css');
 
-      // Run the icon fix only once per application lifecycle
       if (!isLeafletInitialized) {
         delete (L.Icon.Default.prototype as any)._getIconUrl;
         L.Icon.Default.mergeOptions({

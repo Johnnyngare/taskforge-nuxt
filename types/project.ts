@@ -1,5 +1,5 @@
 // types/project.ts
-import type { ITask } from '~/types/task'; // THE FIX: Added 'type' keyword here
+import type { ITask } from '~/types/task'; // Correct type-only import
 
 export enum ProjectStatus {
   Active = 'active',

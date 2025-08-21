@@ -1,7 +1,7 @@
 // types/user.ts
 export enum UserRole {
   Admin = "admin",
-  Manager = "manager", // CORRECTED: Renamed from TeamManager to Manager for direct string match
+  Manager = "manager", 
   FieldOfficer = "field_officer",
   Dispatcher = "dispatcher",
 }
@@ -10,9 +10,9 @@ export interface IUser {
   id: string;
   name: string;
   email: string;
-  role: UserRole; // This is correctly typed as UserRole
+  role: UserRole; // Using the enum for type safety
   profilePhoto?: string | null;
-  provider?: "google" | "local";
+  provider?: "google" | "local"; // To distinguish login methods
   createdAt?: string;
   updatedAt?: string;
 }

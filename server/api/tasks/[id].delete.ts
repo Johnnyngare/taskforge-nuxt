@@ -1,19 +1,16 @@
 // server/api/tasks/[id].delete.ts
 import mongoose from "mongoose";
 import { TaskModel } from "~/server/db/models/task";
-import { defineEventHandler, createError } from "h3";
 import { UserModel } from "~/server/db/models/user";
 import { ProjectModel } from "~/server/db/models/project";
 import { UserRole } from "~/types/user";
+import type { H3Event } from 'h3';
 
-export default defineEventHandler(async (event) => {
-  const taskId = event.context.params?.id;
+export default defineEventHandler(async (event: H3Event) => { // Type 'event'
+  const taskId = getRouterParam(event, 'id');
 
   if (!taskId || !mongoose.Types.ObjectId.isValid(taskId)) {
-    throw createError({
-      statusCode: 400,
-      message: "Invalid Task ID provided.",
-    });
+    throw createError({ statusCode: 400, message: "Invalid Task ID provided." });
   }
 
   const ctxUser = event.context?.user;
@@ -21,7 +18,7 @@ export default defineEventHandler(async (event) => {
     throw createError({ statusCode: 401, message: "Unauthorized: User not authenticated." });
   }
   const userId = new mongoose.Types.ObjectId(ctxUser.id);
-  const role = ctxUser.role;
+  const role: UserRole = ctxUser.role as UserRole; // Explicitly cast role
 
   const taskToDelete = await TaskModel.findById(taskId);
 
@@ -29,19 +26,27 @@ export default defineEventHandler(async (event) => {
     throw createError({ statusCode: 404, message: "Task not found." });
   }
 
-  // CRITICAL RBAC for DELETE
+  // --- REVISED RBAC for DELETE (Comprehensive & Handles 'dispatcher' properly) ---
   let canDelete = false;
-  if (role === UserRole.Admin) { canDelete = true; }
-  else if (String(taskToDelete.userId) === String(userId)) { canDelete = true; }
-  else if (taskToDelete.projectId) {
-    const project = await ProjectModel.findById(taskToDelete.projectId).select('owner members').lean();
-    if (project) {
-      if (String(project.owner) === String(userId) && (role === "manager" || role === "dispatcher")) { canDelete = true; }
-      else if (project.members.map(String).includes(String(userId)) && (role === "manager" || role === "dispatcher")) { canDelete = true; }
-      else if (role === UserRole.TeamManager) {
-        const managerDoc = await UserModel.findById(userId).select('managedProjects').lean();
-        const managedProjectIds = managerDoc?.managedProjects?.map((id: string) => String(new mongoose.Types.ObjectId(id))) || [];
-        if (managedProjectIds.includes(String(taskToDelete.projectId))) { canDelete = true; }
+  if (role === UserRole.Admin) { // Admins can always delete
+    canDelete = true;
+  } else if (taskToDelete.userId.equals(userId)) { // Task owner can delete
+    canDelete = true;
+  } else if ([UserRole.Manager, UserRole.Dispatcher].includes(role)) {
+    // Managers/Dispatchers can delete tasks if they manage the project associated with the task
+    if (taskToDelete.projectId) {
+      const project = await ProjectModel.findById(taskToDelete.projectId).select('owner members').lean();
+      if (project) {
+        // If manager/dispatcher is project owner or member (direct project involvement)
+        if (project.owner.equals(userId) || project.members?.some(memberId => memberId.equals(userId))) {
+          canDelete = true;
+        } else {
+          // Check if manager/dispatcher manages this specific project (assuming UserModel has 'managedProjects')
+          const managerUser = await UserModel.findById(userId).select('managedProjects').lean();
+          if (managerUser?.managedProjects?.some((mpId: mongoose.Types.ObjectId) => mpId.equals(taskToDelete.projectId))) {
+            canDelete = true;
+          }
+        }
       }
     }
   }
@@ -54,15 +59,12 @@ export default defineEventHandler(async (event) => {
   try {
     const deletedTask = await TaskModel.findByIdAndDelete(taskId);
 
-    if (!deletedTask) {
-      throw createError({ statusCode: 404, message: "Task not found." });
+    if (!deletedTask) { // Should not happen if task was found earlier
+      throw createError({ statusCode: 404, message: "Task not found after deletion attempt." });
     }
 
-    return {
-      statusCode: 200,
-      message: "Task deleted successfully.",
-      taskId: taskId,
-    };
+    event.node.res.statusCode = 204; // Return 204 No Content for successful deletion
+    return; // No body for 204
   } catch (error: any) {
     if (error.statusCode) { throw error; }
     console.error("Error deleting task in DB:", error);

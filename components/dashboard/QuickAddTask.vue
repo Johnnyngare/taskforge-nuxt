@@ -16,7 +16,6 @@
     </div>
 
     <form @submit.prevent="submitTask" class="space-y-4">
-      <!-- Form fields remain the same -->
       <div>
         <label
           for="quick-title"
@@ -256,10 +255,12 @@ const today = computed(() => new Date().toISOString().split("T")[0]);
 
 const mapInstance = ref<LeafletMapInstance | null>(null);
 const locationMarker = ref<LeafletMarker | null>(null);
-const initialMapZoom = 13;
-const initialMapCenter = ref<LatLngExpression>([51.505, -0.09]);
 
-// --- UPDATED with robust error handling ---
+// --- THE CHANGES ARE HERE ---
+const initialMapZoom = 10; // Changed from 13 to 10
+const initialMapCenter = ref<LatLngExpression>([0.0, 38.0]); // Changed from London to Kenya
+
+// --- UPDATED with robust error handling for geolocation ---
 const onMapReady = (map: LeafletMapInstance) => {
   mapInstance.value = map;
   if (navigator.geolocation) {
@@ -267,15 +268,21 @@ const onMapReady = (map: LeafletMapInstance) => {
       (position) => {
         const lat = position.coords.latitude;
         const lng = position.coords.longitude;
-        initialMapCenter.value = [lat, lng];
-        map.setView([lat, lng], initialMapZoom);
+        const userLatLng: LatLngExpression = [lat, lng]; // Define userLatLng
+        map.setView(userLatLng, initialMapZoom); // Use initialMapZoom
+        initialMapCenter.value = userLatLng; // Update initial center if location found
       },
       (error) => {
         console.warn(`Geolocation error: ${error.message}. Using default map center.`);
-      }
+      },
+      { enableHighAccuracy: true, timeout: 5000, maximumAge: 0 }
     );
   } else {
     console.warn("Geolocation is not supported by this browser.");
+  }
+  // CRITICAL: Attach the click listener only after the map is ready and Leaflet is loaded
+  if (L.value) {
+    map.on('click', handleMapClick);
   }
 };
 
@@ -323,7 +330,6 @@ const submitTask = async () => {
 
   submitting.value = true;
   try {
-    // The taskData object is already correctly structured for the updated API
     const taskData: Partial<ITask> = {
       title: form.value.title.trim(),
       description: form.value.description.trim() || undefined,
