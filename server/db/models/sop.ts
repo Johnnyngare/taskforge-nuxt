@@ -1,33 +1,32 @@
 // server/db/models/sop.ts
 
 import mongoose, { Schema, model, type Document } from 'mongoose';
-import type { ISop, ISopAttachment } from '~/types/sop'; // NEW: Import ISop and ISopAttachment
+import type { ISop, ISopAttachment } from '~/types/sop';
 
-// This interface is for Mongoose's internal use for the main SOP document
-export interface ISopModel extends Document, Omit<ISop, 'id' | 'author' | 'attachments'> {
-  authorId: mongoose.Types.ObjectId;
-  attachments: ISopAttachment[]; // Add attachments array to the Mongoose Model interface
-}
-
-// NEW: Sub-schema for individual attachments (embedded directly in SopSchema)
+// Sub-schema for individual attachments (embedded directly in SopSchema)
 const SopAttachmentSchema = new Schema<ISopAttachment>(
   {
-    id: { type: String, required: true }, // Unique ID for the attachment (UUID generated on backend)
+    id: { type: String, required: true },
     originalName: { type: String, required: true },
-    storedName: { type: String, required: true }, // Name under which it's saved on disk/S3
+    storedName: { type: String, required: true },
     mimeType: { type: String, required: true },
-    size: { type: Number, required: true }, // in bytes
-    path: { type: String, required: true }, // Local file path or S3 key
-    url: { type: String, required: true }, // Publicly accessible URL for download/preview
+    size: { type: Number, required: true },
+    path: { type: String, required: true },
+    url: { type: String, required: true },
     uploadedAt: { type: Date, default: Date.now, required: true },
-    uploadedBy: { // Store basic user info for traceability
+    uploadedBy: {
       id: { type: String, required: true },
       name: { type: String, required: true },
     },
   },
-  { _id: false } // Crucial: Do not create a separate _id for embedded sub-documents
+  { _id: false }
 );
 
+// Main SOP Model Interface
+export interface ISopModel extends Document, Omit<ISop, 'id' | 'author' | 'attachments'> {
+  authorId: mongoose.Types.ObjectId;
+  attachments: ISopAttachment[];
+}
 
 const SopSchema = new Schema<ISopModel>(
   {
@@ -36,44 +35,39 @@ const SopSchema = new Schema<ISopModel>(
     category: { type: String, required: true, index: true },
     tags: { type: [String], index: true },
     authorId: { type: Schema.Types.ObjectId, ref: 'User', required: true },
-    attachments: { type: [SopAttachmentSchema], default: [] }, // NEW: Add the attachments array using the sub-schema
+    attachments: { type: [SopAttachmentSchema], default: [] },
   },
   {
-    timestamps: true, // Handles createdAt and updatedAt automatically
+    timestamps: true,
     toJSON: {
       virtuals: true,
-      transform(doc, ret: any) { // Type 'ret' as 'any' to allow property manipulation
-        ret.id = ret._id; // Map _id to id
+      transform(doc, ret: any) {
+        ret.id = ret._id;
 
         // Transform authorId to author object if populated
         if (ret.authorId && typeof ret.authorId === 'object' && ret.authorId.name) {
-    ret.author = {
-      id: ret.authorId._id.toString(),
-      name: ret.authorId.name,
-    };
-  } else if (ret.authorId) { // authorId exists but wasn't populated (is an ObjectId string)
-    // You might decide to return author: { id: ret.authorId.toString(), name: 'Deleted User' } or null
-    ret.author = { id: ret.authorId.toString(), name: 'Unknown User' };
-  } else { // authorId is null or undefined (shouldn't happen if required)
-    ret.author = null; // Explicitly set to null to avoid 'undefined'
-  }
-  // --- END THE FIX ---
+          ret.author = {
+            id: ret.authorId._id.toString(),
+            name: ret.authorId.name,
+          };
+        } else if (ret.authorId) { // If authorId is just an ObjectId string (not populated)
+          ret.author = { id: ret.authorId.toString(), name: 'Unknown User' }; // Fallback
+        } else { // Should not happen if authorId is required
+          ret.author = null;
+        }
 
-        // Transform attachments if populated (optional, depends on need for nested user data)
-        // If attachments were populated with full user objects, you'd transform them here.
-        // For now, it directly matches ISopAttachment.
+        // --- Crucial: Ensure attachments are simply passed through ---
+        // If 'attachments' is a direct schema field, it will be in 'ret' automatically.
+        // DO NOT delete ret.attachments here.
 
-        // Clean up internal Mongoose fields
         delete ret._id;
         delete ret.__v;
         delete ret.authorId; // Remove original authorId after transformation
-
         return ret;
       },
     },
   }
 );
 
-// Use the existing model if it's already been compiled, otherwise compile it.
 export const SopModel =
   mongoose.models.Sop || model<ISopModel>('Sop', SopSchema);

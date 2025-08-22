@@ -11,7 +11,7 @@
         :initial-data="sop"
         @save="handleSave"
         @cancel="isOpen = false"
-        @download-attachment="handleDownloadAttachment" 
+        @download-attachment="handleDownloadAttachment"
       />
     </div>
   </UModal>
@@ -21,7 +21,7 @@
 import { computed } from 'vue';
 import { useSops } from '~/composables/useSops';
 import type { ISop } from '~/types/sop';
-import SopForm from '~/components/sop/SopForm.vue'; // Ensure SopForm is imported
+import SopForm from '~/components/sop/SopForm.vue';
 
 const props = defineProps<{
   modelValue: boolean;
@@ -30,7 +30,6 @@ const props = defineProps<{
 
 const emit = defineEmits(['update:modelValue']);
 
-// NEW: Destructure downloadSopAttachment
 const { createSop, updateSop, deleteSopAttachment, downloadSopAttachment } = useSops();
 
 const isEditing = computed(() => !!props.sop);
@@ -40,7 +39,6 @@ const isOpen = computed({
   set: (value) => emit('update:modelValue', value),
 });
 
-// Updated handleSave to accept files and attachments to delete
 const handleSave = async (data: Omit<ISop, 'id' | 'author' | 'createdAt' | 'updatedAt' | 'attachments'>, filesToUpload: File[], attachmentsToDelete: string[]) => {
   if (isEditing.value && props.sop) {
     await updateSop(props.sop.id, data, { filesToUpload, attachmentsToDelete });
@@ -50,7 +48,6 @@ const handleSave = async (data: Omit<ISop, 'id' | 'author' | 'createdAt' | 'upda
   isOpen.value = false;
 };
 
-// NEW: Handler for download event from SopForm
 const handleDownloadAttachment = (attachmentId: string, filename: string) => {
   if (props.sop) {
     downloadSopAttachment(props.sop.id, attachmentId, filename);

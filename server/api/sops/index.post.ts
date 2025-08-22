@@ -4,7 +4,7 @@ import { SopModel } from '~/server/db/models/sop';
 import { UserRole } from '~/types/user';
 import type { H3Event } from 'h3';
 import { readMultipartFormData } from 'h3';
-import {
+import { // Ensure all these are correctly exported from storage.ts
   uploadFile,
   ensureUploadsDir,
   renameFile,
@@ -15,31 +15,24 @@ import {
 import { z } from 'zod';
 import mongoose from 'mongoose';
 import { v4 as uuidv4 } from 'uuid';
+import path from 'node:path';
 
-// --- THE FIX: Corrected Zod Schema for incoming text data ---
+// Zod Schemas for incoming text data
 const sopTextSchema = z.object({
   title: z.string().min(1, 'Title is required.'),
   content: z.string().min(1, 'Content is required.'),
   category: z.string().min(1, 'Category is required.'),
-  // Tags should now expect an array of strings, as that's what is being JSON.stringify'd on the frontend
-  tags: z.array(z.string()).optional().default([]), // <--- CRITICAL FIX for 'tags'
+  tags: z.array(z.string()).optional().default([]), // Correctly handle tags as array
 }).strict();
 
 // File Validation Constants
 const MAX_TOTAL_ATTACHMENTS_PER_SOP = 5;
 const MAX_SINGLE_FILE_SIZE_BYTES = 10 * 1024 * 1024; // 10 MB
 const ALLOWED_MIMES = [
-  'application/pdf',
-  'application/msword', // .doc
-  'application/vnd.openxmlformats-officedocument.wordprocessingml.document', // .docx
-  'application/vnd.ms-excel', // .xls
-  'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', // .xlsx
-  'application/vnd.ms-powerpoint', // .ppt
-  'application/vnd.openxmlformats-officedocument.presentationml.presentation', // .pptx
-  'text/plain',
-  'image/png',
-  'image/jpeg',
-  'image/jpg',
+  'application/pdf', 'application/msword', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+  'application/vnd.ms-excel', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+  'application/vnd.ms-powerpoint', 'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+  'text/plain', 'image/png', 'image/jpeg', 'image/jpg'
 ];
 
 export default defineEventHandler(async (event: H3Event) => {
@@ -61,18 +54,14 @@ export default defineEventHandler(async (event: H3Event) => {
 
   const validationResult = sopTextSchema.safeParse(parsedTextData);
   if (!validationResult.success) {
-    throw createError({
-      statusCode: 400,
-      message: "Validation failed: " + validationResult.error.errors.map(e => e.message).join(', '),
-      data: validationResult.error.format()
-    });
+    throw createError({ statusCode: 400, message: "Validation failed: " + validationResult.error.errors.map(e => e.message).join(', '), data: validationResult.error.format() });
   }
-  const { title, content, category, tags } = validationResult.data; // tags is now guaranteed to be an array
+  const { title, content, category, tags } = validationResult.data;
 
   // --- 2. Handle Temporary File Uploads & Validate ---
   const newAttachmentFiles = formData.filter(field => field.name === 'attachments' && field.data && field.filename);
   const tempAttachmentsMetadata = [];
-  const tempFilePaths: string[] = [];
+  const tempFileAbsolutePaths: string[] = [];
 
   if (newAttachmentFiles.length > MAX_TOTAL_ATTACHMENTS_PER_SOP) { throw createError({ statusCode: 400, message: `Max ${MAX_TOTAL_ATTACHMENTS_PER_SOP} attachments allowed.` }); }
 
@@ -87,7 +76,7 @@ export default defineEventHandler(async (event: H3Event) => {
 
     try {
       const { storedName, filePath, publicUrl } = await uploadFile(file.data, file.filename, tempUploadFolderId);
-      tempFilePaths.push(filePath);
+      tempFileAbsolutePaths.push(filePath);
 
       tempAttachmentsMetadata.push({
         id: uuidv4(),
@@ -95,14 +84,14 @@ export default defineEventHandler(async (event: H3Event) => {
         storedName: storedName,
         mimeType: file.type,
         size: file.data.length,
-        path: path.join(SOP_ATTACHMENTS_SUBDIR, tempUploadFolderId, storedName),
+        path: filePath, // Store ABSOLUTE temporary file path here
         url: publicUrl,
         uploadedAt: new Date().toISOString(),
-        uploadedBy: { id: user.id, name: user.name || 'Unknown' }, // Use user.name directly
+        uploadedBy: { id: user.id, name: user.name || 'Unknown' },
       });
     } catch (uploadError) {
       console.error(`[API POST /sops] Error uploading file '${file.filename}':`, uploadError);
-      await Promise.all(tempFilePaths.map(p => deleteFile(p).catch(e => console.error('Cleanup error:', e))));
+      await Promise.all(tempFileAbsolutePaths.map(p => deleteFile(p).catch(e => console.error('Cleanup error:', e))));
       throw createError({ statusCode: 500, message: `Failed to upload file '${file.filename}'.` });
     }
   }
@@ -114,16 +103,14 @@ export default defineEventHandler(async (event: H3Event) => {
       title,
       content,
       category,
-      tags, // tags is already an array from Zod
+      tags,
       authorId: user.id,
       attachments: tempAttachmentsMetadata,
     });
   } catch (dbError: any) {
     console.error(`[API POST /sops] Database error creating SOP:`, dbError);
-    await Promise.all(tempFilePaths.map(p => deleteFile(p).catch(e => console.error('Cleanup error:', e))));
-    if (dbError.name === 'ValidationError') {
-      throw createError({ statusCode: 400, message: dbError.message, data: dbError.errors });
-    }
+    await Promise.all(tempFileAbsolutePaths.map(p => deleteFile(p).catch(e => console.error('Cleanup error:', e))));
+    if (dbError.name === 'ValidationError') { throw createError({ statusCode: 400, message: dbError.message, data: dbError.errors }); }
     throw createError({ statusCode: 500, message: `Failed to create SOP due to database issue: ${dbError.message || dbError}.` });
   }
 
@@ -132,19 +119,17 @@ export default defineEventHandler(async (event: H3Event) => {
   const updatedAttachments = [];
 
   for (const att of newSopDoc.attachments) {
-    const oldRelativePath = att.path;
-    const newRelativePath = path.join(SOP_ATTACHMENTS_SUBDIR, finalSopId, att.storedName);
-    const publicUrl = `${process.env.UPLOADS_BASE_URL}/${newRelativePath}`;
+    const oldAbsoluteFilePath = att.path; // This is now the ABSOLUTE path from tempAttachmentsMetadata
+    const newRelativePath = path.join(SOP_ATTACHMENTS_SUBDIR, finalSopId, att.storedName); // Relative path for DB/URL
+    const newAbsoluteFilePath = path.join(process.cwd(), UPLOADS_DIR, newRelativePath); // New ABSOLUTE path for rename
+    const publicUrl = `${process.env.UPLOADS_BASE_URL}/${newRelativePath}`; // Construct final public URL
 
     try {
-      await renameFile(
-        path.join(process.cwd(), UPLOADS_DIR, oldRelativePath),
-        path.join(process.cwd(), UPLOADS_DIR, newRelativePath)
-      );
+      await renameFile(oldAbsoluteFilePath, newAbsoluteFilePath); // Renames from temp absolute to final absolute
       updatedAttachments.push({
-        ...att.toJSON(), // Convert subdoc to plain object
-        path: newRelativePath,
-        url: publicUrl
+        ...att, // <--- THE FIX IS HERE: Spread the plain object 'att' directly
+        path: newRelativePath, // Store the NEW relative path in DB
+        url: publicUrl // Update URL to final location
       });
     } catch (moveError: any) {
       console.error(`[API POST /sops] Failed to move file '${att.originalName}' to permanent SOP folder ${finalSopId}:`, moveError);

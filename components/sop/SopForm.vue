@@ -95,7 +95,7 @@
 
 <script setup lang="ts">
 import { ref, watch, reactive } from 'vue';
-import type { ISop, ISopAttachment } from '~/types/sop'; // Import ISopAttachment
+import type { ISop, ISopAttachment } from '~/types/sop';
 
 type SopFormData = Omit<ISop, 'id' | 'author' | 'createdAt' | 'updatedAt' | 'attachments'>;
 
@@ -104,9 +104,9 @@ const props = defineProps<{
 }>();
 
 const emit = defineEmits<{
-  (e: 'save', data: SopFormData, filesToUpload: File[], attachmentsToDelete: string[]): void; // NEW: Emit files and delete list
+  (e: 'save', data: SopFormData, filesToUpload: File[], attachmentsToDelete: string[]): void;
   (e: 'cancel'): void;
-  (e: 'download-attachment', attachmentId: string, filename: string): void; // NEW: Emit for download
+  (e: 'download-attachment', attachmentId: string, filename: string): void;
 }>();
 
 const formState = ref<SopFormData>({
@@ -117,9 +117,9 @@ const formState = ref<SopFormData>({
 });
 
 const tagsInput = ref('');
-const filesToUpload = ref<File[]>([]); // NEW: Files selected by user for new upload
-const attachmentsToDelete = ref<string[]>([]); // NEW: IDs of attachments marked for deletion
-const fileErrors = ref<string[]>([]); // NEW: Errors during file selection
+const filesToUpload = ref<File[]>([]);
+const attachmentsToDelete = ref<string[]>([]);
+const fileErrors = ref<string[]>([]);
 
 const MAX_FILE_COUNT = 5;
 const MAX_FILE_SIZE_MB = 10;
@@ -148,12 +148,10 @@ watch(
         tags: sop.tags,
       };
       tagsInput.value = sop.tags.join(', ');
-      // When editing, clear new files and deletion list from previous open/edit
       filesToUpload.value = [];
       attachmentsToDelete.value = [];
       fileErrors.value = [];
     } else {
-      // Reset form when creating a new one
       formState.value = { title: '', content: '', category: '', tags: [] };
       tagsInput.value = '';
       filesToUpload.value = [];
@@ -174,7 +172,7 @@ const handleFileSelect = (event: Event) => {
 
   if (currentTotalFiles > MAX_FILE_COUNT) {
     fileErrors.value.push(`Max ${MAX_FILE_COUNT} attachments allowed. You selected too many.`);
-    input.value = ''; // Clear input
+    input.value = '';
     return;
   }
 
@@ -190,7 +188,7 @@ const handleFileSelect = (event: Event) => {
     filesToUpload.value.push(file);
   });
 
-  input.value = ''; // Clear input to allow selecting same files again if needed
+  input.value = '';
 };
 
 const removeSelectedFile = (index: number) => {
@@ -212,6 +210,6 @@ const unmarkAttachmentForDeletion = (id: string) => {
 
 const handleSubmit = () => {
   formState.value.tags = tagsInput.value.split(',').map(tag => tag.trim()).filter(Boolean);
-  emit('save', formState.value, filesToUpload.value, attachmentsToDelete.value); // Emit all relevant data
+  emit('save', formState.value, filesToUpload.value, attachmentsToDelete.value);
 };
 </script>

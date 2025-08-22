@@ -5,7 +5,14 @@ import { UserRole } from '~/types/user';
 import type { H3Event } from 'h3';
 import mongoose from 'mongoose';
 import { readMultipartFormData } from 'h3';
-import { uploadFile, deleteFile, ensureUploadsDir, renameFile, SOP_ATTACHMENTS_SUBDIR, UPLOADS_DIR } from '~/server/utils/storage';
+import {
+  uploadFile,
+  deleteFile,
+  ensureUploadsDir,
+  renameFile,
+  SOP_ATTACHMENTS_SUBDIR,
+  UPLOADS_DIR
+} from '~/server/utils/storage';
 import { z } from 'zod';
 import { v4 as uuidv4 } from 'uuid';
 import path from 'node:path';
@@ -15,11 +22,10 @@ const sopTextUpdateSchema = z.object({
   title: z.string().min(1, 'Title is required.').optional(),
   content: z.string().min(1, 'Content is required.').optional(),
   category: z.string().min(1, 'Category is required.').optional(),
-  // THE FIX: tags now expects an array of strings, as sent by the frontend
-  tags: z.array(z.string()).optional().default([]), // Default to empty array if omitted
+  tags: z.array(z.string()).optional().default([]),
 }).strict();
 
-// NEW: Zod Schema for attachmentsToDelete (comes as a stringified JSON array)
+// Zod Schema for attachmentsToDelete (comes as a stringified JSON array)
 const attachmentsToDeleteSchema = z.array(z.string()).optional().default([]);
 
 // File Validation Constants
@@ -71,10 +77,10 @@ export default defineEventHandler(async (event: H3Event) => {
   // 2. Process Existing Attachments: Filter out those marked for deletion
   let attachmentsToKeep = sopToUpdate.attachments?.filter(att => !attachmentIdsToDelete.includes(att.id)) || [];
 
-  // 3. Handle New File Uploads
+  // 3. Handle New File Uploads (to temp folder)
   const newAttachmentFiles = formData.filter(field => field.name === 'attachments' && field.data && field.filename);
   const newAttachmentsMetadata = [];
-  const tempFilePaths: string[] = []; // Track temp paths for cleanup
+  const tempFileAbsolutePaths: string[] = [];
 
   const totalFilesAfterDeletionAndUpload = attachmentsToKeep.length + newAttachmentFiles.length;
   if (totalFilesAfterDeletionAndUpload > MAX_TOTAL_ATTACHMENTS_PER_SOP) {
@@ -83,7 +89,7 @@ export default defineEventHandler(async (event: H3Event) => {
 
   await ensureUploadsDir();
 
-  const tempUploadFolderId = `temp_update_${uuidv4()}`; // Temp folder for update uploads
+  const tempUploadFolderId = `temp_update_${uuidv4()}`;
 
   for (const file of newAttachmentFiles) {
     if (!file.filename || !file.type || !file.data) { throw createError({ statusCode: 400, message: `Invalid file provided: ${file.filename || 'unknown'}.` }); }
@@ -92,7 +98,7 @@ export default defineEventHandler(async (event: H3Event) => {
 
     try {
       const { storedName, filePath, publicUrl } = await uploadFile(file.data, file.filename, tempUploadFolderId);
-      tempFilePaths.push(filePath);
+      tempFileAbsolutePaths.push(filePath);
 
       newAttachmentsMetadata.push({
         id: uuidv4(),
@@ -100,55 +106,52 @@ export default defineEventHandler(async (event: H3Event) => {
         storedName: storedName,
         mimeType: file.type,
         size: file.data.length,
-        path: path.join(SOP_ATTACHMENTS_SUBDIR, tempUploadFolderId, storedName), // Temp relative path
+        path: filePath, // Store ABSOLUTE temporary path for now
         url: publicUrl,
         uploadedAt: new Date().toISOString(),
         uploadedBy: { id: user.id, name: user.name || 'Unknown' },
       });
     } catch (uploadError) {
       console.error(`[API PUT /sops] Error uploading new file '${file.filename}':`, uploadError);
-      await Promise.all(tempFilePaths.map(p => deleteFile(p).catch(e => console.error('Cleanup error:', e))));
+      await Promise.all(tempFileAbsolutePaths.map(p => deleteFile(p).catch(e => console.error('Cleanup error:', e))));
       throw createError({ statusCode: 500, message: `Failed to upload new file '${file.filename}'.` });
     }
   }
 
   // 4. Delete files from storage that were marked for deletion
-  const deletionPromises = attachmentsToDeleteField
-    ? attachmentIdsToDelete.map(async (attId) => {
+  const deletionPromises = attachmentIdsToDelete.map(async (attId) => {
         const att = sopToUpdate.attachments.find(a => a.id === attId);
         if (att) {
+            // Construct absolute path for deletion from the path stored in DB (which is RELATIVE for old files)
             const filePathOnDisk = path.join(process.cwd(), UPLOADS_DIR, att.path);
             await deleteFile(filePathOnDisk);
         } else {
             console.warn(`[API PUT /sops] Attempted to delete attachment with ID ${attId} not found on SOP ${sopId}.`);
         }
-    })
-    : [];
+    });
 
-  await Promise.all(deletionPromises); // Execute all deletions concurrently
+  await Promise.all(deletionPromises);
 
   // 5. Build Final Attachments Array and Move New Files to Permanent Location
   const finalAttachments = [...attachmentsToKeep, ...newAttachmentsMetadata];
   const updatedFinalAttachments = [];
 
   for (const att of finalAttachments) {
-      if (att.path.startsWith(path.join(SOP_ATTACHMENTS_SUBDIR, tempUploadFolderId))) { // Check if it's a newly uploaded temp file
-          const oldRelativePath = att.path;
-          const newRelativePath = path.join(SOP_ATTACHMENTS_SUBDIR, sopId, att.storedName);
-          const publicUrl = `${process.env.UPLOADS_BASE_URL}/${newRelativePath}`;
+      // Check if it's a newly uploaded temp file that needs to be moved to its permanent SOP folder
+      // att.path here is the absolute temp path from newAttachmentsMetadata
+      if (att.path.startsWith(path.join(process.cwd(), UPLOADS_DIR, SOP_ATTACHMENTS_SUBDIR, tempUploadFolderId))) {
+          const oldAbsoluteFilePath = att.path; // This is the absolute temp path
+          const newRelativePath = path.join(SOP_ATTACHMENTS_SUBDIR, sopId, att.storedName); // Relative for DB/URL
+          const newAbsoluteFilePath = path.join(process.cwd(), UPLOADS_DIR, newRelativePath);
 
           try {
-              await renameFile(
-                  path.join(process.cwd(), UPLOADS_DIR, oldRelativePath),
-                  path.join(process.cwd(), UPLOADS_DIR, newRelativePath)
-              );
-              updatedFinalAttachments.push({ ...att, path: newRelativePath, url: publicUrl });
+              await renameFile(oldAbsoluteFilePath, newAbsoluteFilePath);
+              updatedFinalAttachments.push({ ...att, path: newRelativePath, url: `${process.env.UPLOADS_BASE_URL}/${newRelativePath}` }); // Update path to relative, URL to public
           } catch (moveError: any) {
               console.error(`[API PUT /sops] Failed to move new file '${att.originalName}' to permanent SOP folder ${sopId}:`, moveError);
-              // If move fails, the attachment won't be in updatedFinalAttachments, effectively removing it.
           }
       } else {
-          updatedFinalAttachments.push(att); // Existing attachments (not moved from temp) go directly
+          updatedFinalAttachments.push(att); // Existing attachments (already in permanent folder, or failed to move) go directly
       }
   }
 
@@ -158,7 +161,7 @@ export default defineEventHandler(async (event: H3Event) => {
     ...(content !== undefined && { content }),
     ...(category !== undefined && { category }),
     ...(tags !== undefined && { tags }),
-    attachments: updatedFinalAttachments, // Update attachments array
+    attachments: updatedFinalAttachments,
   };
 
   try {
