@@ -5,8 +5,9 @@
     @click="selectTask"
     :class="{
       'cursor-pointer': task.taskType === TaskType.Field,
+      'border-emerald-500 ring-2 ring-emerald-500/50': isSelected, // ADDED: Class for highlight
     }"
-    class="group rounded-xl border border-slate-700 bg-slate-800 p-4 shadow-md transition-all duration-200 hover:border-emerald-500"
+    class="group rounded-xl border border-slate-700 bg-slate-800 p-4 shadow-md transition-all duration-200 hover:border-emerald-400"
   >
     <div class="flex items-start justify-between">
       <div class="min-w-0 flex-1">
@@ -120,14 +121,14 @@
 <script setup lang="ts">
 import { ref, computed } from "vue";
 import { onClickOutside } from "@vueuse/core";
-// NEW: Import TaskType to check against it
 import { TaskStatus, TaskType, type ITask } from "~/types/task";
+import TaskPriorityBadge from "~/components/TaskPriorityBadge.vue"; // ADDED: Missing import for TaskPriorityBadge
 
 const props = defineProps<{
   task: ITask;
+  isSelected: boolean; // ADDED: Correctly define isSelected prop
 }>();
 
-// NEW: Add 'task-selected' to the list of defined emits
 const emit = defineEmits<{
   (e: "edit", id: string): void;
   (e: "delete", id: string): void;
@@ -142,9 +143,7 @@ onClickOutside(cardRef, () => {
   showDropdown.value = false;
 });
 
-// NEW: This function is called when the main card area is clicked
 const selectTask = () => {
-  // Only emit the event if the task is a Field task
   if (props.task.taskType === TaskType.Field) {
     emit("task-selected", props.task);
   }

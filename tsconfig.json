@@ -1,43 +1,56 @@
 // tsconfig.json
 {
-  "extends": "./.nuxt/tsconfig.json",
-  "compilerOptions": {
-    "skipLibCheck": true,
-    // Add 'dom' to 'lib' for browser-specific types (like navigator.geolocation, Map, etc.)
-    // Ensure 'esnext' is present for modern JS features.
-    "lib": ["esnext", "dom", "dom.iterable"],
-    "jsx": "preserve", // Keep this
-    "jsxFactory": "h", // Standard Vue 3 JSX factory if using TSX or some UI libraries
-    "esModuleInterop": true, // Recommended for better import compatibility
-    "forceConsistentCasingInFileNames": true,
-    "moduleResolution": "bundler", // Or "node", "bundler" is typical for Vite/Nuxt 3
+  // REMOVED: "extends": "./.nuxt/tsconfig.json"
+  // Nuxt 3 automatically integrates its internal tsconfig.json.
+  // Manually extending can lead to conflicts or circular dependencies.
 
-    // These `types` are for global type declarations
-    // Re-verify these, as some might be covered by @nuxtjs/leaflet
+  "compilerOptions": {
+    "target": "ES2022", // Use a specific ES version (e.g., ES2022)
+    "module": "ESNext", // Important for modern module resolution
+    "lib": ["ESNext", "DOM", "DOM.Iterable"], // Specify environments for built-in types
+    "skipLibCheck": true, // Recommended for large projects/node_modules to speed up compilation
+    "strict": true, // Always enable strict type checking for robustness
+    "forceConsistentCasingInFileNames": true,
+    "noEmit": true, // Important for build systems like Nuxt/Vite that handle transpilation
+    "esModuleInterop": true, // Recommended for compatibility with CommonJS modules
+    "isolatedModules": true, // Enforces that each file can be safely transpiled in isolation
+    "moduleResolution": "Bundler", // Modern resolution strategy for Vite/Nuxt 3 (preferred)
+                                   // If "Bundler" causes issues, try "Node".
+
+    // If you explicitly use TSX (files ending in .tsx) for Vue components:
+    // "jsx": "preserve",
+    // "jsxFactory": "h",
+
+    // Paths are typically managed by Nuxt's auto-generation (e.g., '~/*', '@/*')
+    // No need to define them here unless you have custom aliases NOT handled by Nuxt.
+
+    // Specifies additional type definitions to be included.
+    // This typically includes global libraries like 'node' and client-side libraries.
+    // Ensure that all needed global types are listed, as this *overrides* default inclusion.
     "types": [
-      "node",           // For 'process' global, Node.js environment types
-      "leaflet",        // For global Leaflet (L) types
-      "@nuxt/ui",       // For @nuxt/ui types
-      // IMPORTANT: DO NOT include '@nuxtjs/leaflet' here for *types*.
-      // Instead, we'll make its components globally available via `vue-shims.d.ts`
-      // and rely on direct 'import type' or global components for usage.
+      "node",           // For Node.js global types (e.g., process)
+      "leaflet",        // For global Leaflet (L) types (requires @types/leaflet)
+      "@nuxt/ui",       // For Nuxt UI component types
+      // If you add other global libraries (e.g., 'jest', 'vitest'), add them here.
     ],
 
-    // If using Vue 2 Composition API or some libraries that rely on older Vue patterns
-    // "paths": {
-    //   "vue": ["node_modules/vue/dist/vue.esm-bundler.js"] // Example for specific Vue module
-    // }
+    // Base URL for resolving non-relative module names
+    "baseUrl": "." // Important for path resolution
   },
   "include": [
-    "**/*",
-    ".nuxt/types/**/*.ts", // Nuxt generated types
-    "plugins/**/*.ts",
-    "types/**/*.d.ts" // CRITICAL: Explicitly include your custom type declaration folder
+    // Include all TypeScript files in your project.
+    "**/*.ts",
+    "**/*.tsx",
+    "**/*.vue",
+    // Nuxt generates its own types here, ensure they are included.
+    ".nuxt/types/**/*.ts",
+    // Ensure your custom type declarations are included.
+    "types/**/*.d.ts"
   ],
   "exclude": [
-    "node_modules",
-    "dist",
+    "node_modules", // Exclude node_modules for performance
+    "dist",         // Exclude build output directories
     ".output",
-    ".nuxt"
+    ".nuxt"         // Exclude Nuxt's internal build directory
   ]
 }

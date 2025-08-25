@@ -63,7 +63,6 @@
 
 <script setup lang="ts">
 definePageMeta({
-  middleware: "02-auth",
   layout: "dashboard",
 });
 </script>

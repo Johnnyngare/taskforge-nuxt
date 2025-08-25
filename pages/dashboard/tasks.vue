@@ -47,16 +47,7 @@
       </div>
     </div>
 
-    <!-- Map Display Section (conditionally shown based on filterType) -->
-    <DashboardFieldTasksMap
-      v-if="filterType === TaskType.Field"
-      :tasks="tasks || []"
-      class="mb-6"
-    />
-    <div v-else-if="filterType === TaskType.Field && filteredTasks.length === 0" class="mb-6 text-slate-400 text-sm text-center py-8">
-      No field tasks found with the current filters.
-    </div>
-
+    <!-- Removed DashboardFieldTasksMap for this page -->
 
     <div class="rounded-xl border border-slate-700 bg-slate-800">
       <div v-if="pending" class="flex justify-center p-12">
@@ -71,12 +62,16 @@
       </div>
 
       <div v-else class="p-4">
-        <div v-if="filteredTasks.length === 0" class="text-center text-slate-400 py-8">
-          No tasks found matching your criteria.
-        </div>
+        <!-- THE FIX: Correct v-if/v-else structure for TaskList -->
+        <template v-if="filteredTasks.length === 0">
+          <div class="text-center text-slate-400 py-8">
+            No tasks found matching your criteria.
+          </div>
+        </template>
         <TaskList
           v-else
           :tasks="filteredTasks"
+          :selected-task-id="null"
           @task-updated="handleTaskUpdate"
           @task-deleted="handleTaskDelete"
           @edit-task="handleEditTask"
@@ -99,19 +94,17 @@
 </template>
 
 <script setup lang="ts">
-import { ref, type Ref, computed } from "vue"; // Added computed
+import { ref, type Ref, computed } from "vue";
 import { useTasks } from "~/composables/useTasks";
-import { TaskStatus, TaskType, type ITask } from "~/types/task"; // Added TaskType
-import { useToast } from 'vue-toastification'; // Added useToast
+import { TaskStatus, TaskType, type ITask } from "~/types/task";
+import { useToast } from 'vue-toastification';
 
-// Import necessary local components
-import DashboardFieldTasksMap from '~/components/dashboard/DashboardFieldTasksMap.vue';
 import DashboardQuickAddTask from '~/components/dashboard/QuickAddTask.vue';
-import TaskEditModal from '~/components/TaskEditModal.vue'; // Corrected path
+import TaskEditModal from '~/components/TaskEditModal.vue';
+import TaskList from "~/components/TaskList.vue"; // Explicitly imported
 
 definePageMeta({
   layout: "dashboard",
-  middleware: "02-auth",
 });
 
 useSeoMeta({
@@ -124,10 +117,10 @@ const { tasks, pending, error, refresh, updateTask, deleteTask } = useTasks();
 const showCreateModal = ref(false);
 const editingTask: Ref<ITask | null> = ref(null);
 
-const filterStatus = ref<TaskStatus | null>(null); // Added filterStatus
-const filterType = ref<TaskType | null>(null); // Added filterType
+const filterStatus = ref<TaskStatus | null>(null);
+const filterType = ref<TaskType | null>(null);
 
-const filteredTasks = computed(() => { // Added filteredTasks computed property
+const filteredTasks = computed(() => {
   if (!Array.isArray(tasks.value)) return [];
 
   return tasks.value.filter((task: ITask) => {
@@ -137,23 +130,17 @@ const filteredTasks = computed(() => { // Added filteredTasks computed property
   });
 });
 
-// Added this computed property back for the v-else-if condition on the map
-const fieldTasks = computed(() => {
-  return filteredTasks.value.filter((task) => task.taskType === TaskType.Field);
-});
-
-
 const handleTaskCreated = () => {
   showCreateModal.value = false;
-  refresh(); // Important: Refresh tasks after creation to show new task
-  toast.success("Task created!"); // Changed toast call
+  refresh();
+  toast.success("Task created!");
 };
 
 const handleTaskUpdate = async (taskId: string, updates: Partial<ITask>) => {
-  try { // Added try/catch for proper error handling and toast messages
+  try {
     await updateTask(taskId, updates);
-    refresh(); // Important: Refresh tasks after update
-    toast.success("Task updated!"); // Changed toast call
+    refresh();
+    toast.success("Task updated!");
   } catch (err: unknown) {
     const errorMessage = (err as any).data?.message || 'An unexpected error occurred.';
     toast.error(`Error updating task: ${errorMessage}`);
@@ -162,10 +149,10 @@ const handleTaskUpdate = async (taskId: string, updates: Partial<ITask>) => {
 
 const handleTaskDelete = async (taskId: string) => {
   if (!confirm("Are you sure you want to delete this task?")) return;
-  try { // Added try/catch for proper error handling and toast messages
+  try {
     await deleteTask(taskId);
-    refresh(); // Important: Refresh tasks after deletion
-    toast.info("Task deleted!"); // Changed toast call
+    refresh();
+    toast.info("Task deleted!");
   } catch (err: unknown) {
     const errorMessage = (err as any).data?.message || 'An unexpected error occurred.';
     toast.error(`Error deleting task: ${errorMessage}`);
@@ -180,23 +167,14 @@ const handleEditTask = (taskId: string) => {
 };
 
 const handleSaveEdit = async (taskId: string, updatedData: Partial<ITask>) => {
-  try { // Added try/catch for proper error handling and toast messages
+  try {
     await updateTask(taskId, updatedData);
     editingTask.value = null;
-    refresh(); // Important: Refresh tasks after save
-    toast.success("Task saved!"); // Changed toast call
+    refresh();
+    toast.success("Task saved!");
   } catch (err: unknown) {
     const errorMessage = (err as any).data?.message || 'An unexpected error occurred.';
     toast.error(`Error saving task: ${errorMessage}`);
   }
 };
-
-// Added formatDate helper if needed in template (not strictly used in this specific template, but good practice)
-const formatDate = (dateString?: string) =>
-  dateString
-    ? new Date(dateString).toLocaleDateString("en-US", {
-        month: "short",
-        day: "numeric",
-      })
-    : "";
 </script>

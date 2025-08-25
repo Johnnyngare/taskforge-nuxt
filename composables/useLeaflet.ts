@@ -2,7 +2,6 @@
 
 import { ref, onMounted } from 'vue';
 
-// A flag to ensure we only run the icon setup logic once.
 let isLeafletInitialized = false;
 
 export function useLeaflet() {
@@ -10,11 +9,13 @@ export function useLeaflet() {
 
   onMounted(async () => {
     if (process.client) {
-      // Dynamically import Leaflet only on the client-side
       const L = await import('leaflet');
+      // REMOVED: import 'leaflet/dist/leaflet.css';
+      // This CSS import is now handled globally in nuxt.config.ts for consistency and reliability.
 
-      // Run the icon fix only once per application lifecycle
       if (!isLeafletInitialized) {
+        // These lines are critical for ensuring Leaflet's default marker icons load correctly
+        // from local assets instead of trying to fetch them from a default CDN path (which often fails).
         delete (L.Icon.Default.prototype as any)._getIconUrl;
         L.Icon.Default.mergeOptions({
           iconRetinaUrl: '/leaflet/images/marker-icon-2x.png',

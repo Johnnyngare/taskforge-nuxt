@@ -1,50 +1,57 @@
 // types/task.ts
+// Assuming basic types are defined elsewhere or not needed here:
+// export interface IUser { /* ... */ }
+
 export enum TaskStatus {
-  Pending = "pending",
-  InProgress = "in_progress",
-  Completed = "completed",
-  Cancelled = "cancelled",
+  Pending = 'pending',
+  InProgress = 'in_progress',
+  Completed = 'completed',
+  Cancelled = 'cancelled',
 }
 
 export enum TaskPriority {
-  Low = "Low",
-  Medium = "Medium",
-  High = "High",
-  Urgent = "Urgent",
+  Low = 'low',
+  Medium = 'medium',
+  High = 'high',
+  Urgent = 'urgent',
 }
 
-// NEW: TaskType Enum
-export enum TaskType {
-  Office = "office",
-  Field = "field",
-}
-
-// NEW: GeoJSON Point structure
+// GeoJSON types for location
 export interface GeoJSONPoint {
-  type: "Point";
+  type: 'Point';
   coordinates: [number, number]; // [longitude, latitude]
 }
 
-// Update the ITask interface to include new fields
+export enum TaskType {
+  Office = 'office',
+  Field = 'field',
+}
+
+// The ITask interface
 export interface ITask {
   id: string;
   title: string;
   description?: string;
   status: TaskStatus;
   priority: TaskPriority;
-  dueDate?: string;
-  createdAt: string;
-  updatedAt: string;
-  userId: string; // The ID of the user who created the task
-  assignedTo?: string[]; // IDs of users assigned to this task
-  projectId?: string; // ID of the project this task belongs to
+  dueDate?: string; // ISO string date
+  userId: string; // ID of the user who owns the task
+  projectId?: string; // ID of the project it belongs to (optional)
+  assignedTo?: string[]; // Array of User IDs assigned to this task
+  cost?: number; // Optional cost for the task
+  taskType: TaskType; // 'office' or 'field'
+  location?: GeoJSONPoint; // GeoJSON data for field tasks
+
+  createdAt: string; // ISO string date
+  updatedAt: string; // ISO string date
+
+  // For populated fields from backend
   project?: {
     id: string;
     name: string;
-  }; // Populated project details for display
-  cost?: number; // Optional cost for the task
-
-  // NEW MAPPING FIELDS
-  taskType: TaskType; // Type of task: 'office' or 'field'
-  location?: GeoJSONPoint; // GeoJSON Point for field tasks
+  };
+  author?: { // Assumed author details for consistency with SOPs
+    id: string;
+    name: string;
+  };
 }

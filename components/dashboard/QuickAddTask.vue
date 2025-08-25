@@ -1,234 +1,260 @@
-<!-- components/dashboard/QuickAddTask.vue -->
+//components/dashboard/QuickAddTask.vue
 <template>
-  <div
-    class="rounded-xl border border-slate-600 bg-slate-800 p-6 shadow-sm"
+  <UCard
+    class="shadow-sm"
+    :ui="{
+      background: 'bg-slate-800 dark:bg-slate-900',
+      ring: 'ring-1 ring-slate-600 dark:ring-slate-700',
+      divide: 'divide-y divide-slate-700',
+    }"
     @keydown.esc="$emit('close')"
   >
-    <div class="mb-4 flex items-center justify-between">
-      <h3 class="text-lg font-semibold text-slate-200">Quick Add Task</h3>
-      <button
-        @click="$emit('close')"
-        class="p-1 text-slate-400 transition-colors hover:text-slate-200"
-        title="Close"
-      >
-        <Icon name="heroicons:x-mark" class="h-5 w-5" />
-      </button>
-    </div>
+    <template #header>
+      <div class="flex items-center justify-between">
+        <h3 class="text-lg font-semibold text-gray-900 dark:text-white">
+          Quick Add Task
+        </h3>
+        <UButton
+          icon="i-heroicons-x-mark-20-solid"
+          color="gray"
+          variant="ghost"
+          @click="$emit('close')"
+          :disabled="submitting"
+          aria-label="Close"
+        />
+      </div>
+    </template>
 
-    <form @submit.prevent="submitTask" class="space-y-4">
-      <!-- Form fields remain the same -->
-      <div>
-        <label
-          for="quick-title"
-          class="mb-1 block text-sm font-medium text-slate-300"
-        >
-          Task Title
-        </label>
-        <FormAppInput
+    <UForm
+      id="quick-add-form"
+      :state="form"
+      @submit.prevent="submitTask"
+      class="space-y-4"
+    >
+      <UFormGroup
+        label="Task Title"
+        for="quick-title"
+        required
+        class="mb-1 block text-sm font-medium text-slate-300"
+      >
+        <UInput
           id="quick-title"
           v-model="form.title"
           placeholder="What needs to be done?"
           required
-          class="w-full"
           :disabled="submitting"
         />
-      </div>
+      </UFormGroup>
 
-      <div>
-        <label
-          for="quick-description"
-          class="mb-1 block text-sm font-medium text-slate-300"
-        >
-          Description (optional)
-        </label>
-        <textarea
+      <UFormGroup
+        label="Description (optional)"
+        for="quick-description"
+        class="mb-1 block text-sm font-medium text-slate-300"
+      >
+        <UTextarea
           id="quick-description"
           v-model="form.description"
           placeholder="Add more details about this task..."
-          rows="2"
-          class="w-full rounded-lg border border-slate-600 bg-slate-700 px-3 py-2 text-slate-200 placeholder-slate-400 transition-colors focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20"
+          :rows="2"
           :disabled="submitting"
         />
-      </div>
+      </UFormGroup>
 
       <div class="grid grid-cols-1 gap-4 sm:grid-cols-2">
-        <div>
-          <label
-            for="quick-priority"
-            class="mb-1 block text-sm font-medium text-slate-300"
-          >
-            Priority
-          </label>
-          <select
+        <UFormGroup
+          label="Priority"
+          for="quick-priority"
+          class="mb-1 block text-sm font-medium text-slate-300"
+        >
+          <USelect
             id="quick-priority"
             v-model="form.priority"
-            class="w-full rounded-lg border border-slate-600 bg-slate-700 px-3 py-2 text-slate-200 transition-colors focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20"
+            :options="Object.values(TaskPriority)"
             :disabled="submitting"
-          >
-            <option :value="TaskPriority.Low">Low</option>
-            <option :value="TaskPriority.Medium">Medium</option>
-            <option :value="TaskPriority.High">High</option>
-            <option :value="TaskPriority.Urgent">Urgent</option>
-          </select>
-        </div>
-        <div>
-          <label
-            for="quick-due-date"
-            class="mb-1 block text-sm font-medium text-slate-300"
-          >
-            Due Date
-          </label>
-          <input
+          />
+        </UFormGroup>
+        <UFormGroup
+          label="Due Date"
+          for="quick-due-date"
+          class="mb-1 block text-sm font-medium text-slate-300"
+        >
+          <UInput
             id="quick-due-date"
             v-model="form.dueDate"
             type="date"
-            class="w-full rounded-lg border border-slate-600 bg-slate-700 px-3 py-2 text-slate-200 transition-colors focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20"
             :disabled="submitting"
             :min="today"
           />
-        </div>
+        </UFormGroup>
       </div>
 
       <!-- Project Selector -->
-      <div>
-        <label
-          for="quick-project"
-          class="mb-1 block text-sm font-medium text-slate-300"
-        >
-          Assign to Project (optional)
-        </label>
-        <select
+      <UFormGroup
+        label="Assign to Project (optional)"
+        for="quick-project"
+        class="mb-1 block text-sm font-medium text-slate-300"
+      >
+        <USelect
           id="quick-project"
           v-model="form.projectId"
-          class="w-full rounded-lg border border-slate-600 bg-slate-700 px-3 py-2 text-slate-200 transition-colors focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20"
+          :options="[{ label: 'No Project', value: null }, ...projectOptions]"
+          option-attribute="label"
+          value-attribute="value"
           :disabled="submitting || projectsPending"
-        >
-          <option :value="null">No Project</option>
-          <option v-if="projectsPending" disabled>Loading projects...</option>
-          <option v-for="p in projects" :key="p.id" :value="p.id">
-            {{ p.name }}
-          </option>
-        </select>
-        <p v-if="projectsError" class="mt-1 text-xs text-rose-400">
+        />
+        <p v-if="projectsError" class="mt-1 text-xs text-red-400">
           Error loading projects: {{ projectsError.message }}
         </p>
-      </div>
+      </UFormGroup>
 
       <!-- Cost Input -->
-      <div>
-        <label
-          for="quick-cost"
-          class="mb-1 block text-sm font-medium text-slate-300"
-        >
-          Cost (Optional)
-        </label>
-        <FormAppInput
+      <UFormGroup
+        label="Cost (Optional)"
+        for="quick-cost"
+        class="mb-1 block text-sm font-medium text-slate-300"
+      >
+        <UInput
           id="quick-cost"
           v-model.number="form.cost"
           type="number"
           placeholder="e.g., 50.00"
-          class="w-full"
           :disabled="submitting"
           step="0.01"
         />
-      </div>
+      </UFormGroup>
 
       <!-- Task Type Selector (Office/Field) -->
-      <div>
-        <label
-          for="task-type"
-          class="mb-1 block text-sm font-medium text-slate-300"
-        >
-          Task Type
-        </label>
-        <select
+      <UFormGroup
+        label="Task Type"
+        for="task-type"
+        class="mb-1 block text-sm font-medium text-slate-300"
+      >
+        <USelect
           id="task-type"
           v-model="form.taskType"
-          class="w-full rounded-lg border border-slate-600 bg-slate-700 px-3 py-2 text-slate-200 transition-colors focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20"
+          :options="Object.values(TaskType)"
           :disabled="submitting"
-        >
-          <option :value="TaskType.Office">Office Task</option>
-          <option :value="TaskType.Field">Field Task</option>
-        </select>
-      </div>
+        />
+      </UFormGroup>
 
       <!-- Map Picker for Field Tasks -->
-      <ClientOnly fallback-tag="div" fallback="Loading map interface...">
-        <div v-if="form.taskType === TaskType.Field">
-          <label class="mb-1 block text-sm font-medium text-slate-300">
-            Pick Location for Field Task
-            <span class="text-xs text-slate-500"
-              >(Click on map to place marker)</span
-            >
-          </label>
-          <p v-if="form.location" class="mb-2 text-sm text-emerald-400">
+      <div v-if="form.taskType === TaskType.Field">
+        <label class="mb-1 block text-sm font-medium text-slate-300">
+          Pick Location for Field Task
+          <span class="text-xs text-slate-500"
+            >(Click on map to place marker)</span
+          >
+        </label>
+
+        <!-- Location Status Display -->
+        <div class="mb-2 flex items-center gap-2">
+          <div class="flex items-center gap-1">
+            <div
+              :class="isMapReady ? 'bg-green-500' : 'bg-yellow-500'"
+              class="h-2 w-2 rounded-full"
+            ></div>
+            <span class="text-xs text-slate-400">
+              Map: {{ isMapReady ? 'Ready' : 'Loading...' }}
+            </span>
+          </div>
+
+          <p v-if="form.location" class="text-sm text-emerald-400">
             Selected: Lat {{ form.location.coordinates[1].toFixed(4) }}, Lng
             {{ form.location.coordinates[0].toFixed(4) }}
           </p>
-          <UiLeafletMap
-            height="300px"
-            :zoom="initialMapZoom"
-            :center="initialMapCenter"
-            @map-ready="onMapReady"
-          />
+          <span v-else class="text-xs text-slate-500"
+            >No location selected</span
+          >
         </div>
-      </ClientOnly>
 
-      <div class="flex flex-col-reverse gap-3 pt-2 sm:flex-row">
-        <FormAppButton
+        <!-- Map Component -->
+        <MapBase
+          ref="mapBaseRef"
+          height="300px"
+          :zoom="mapZoom"
+          :center="mapCenter"
+          :invalidate-size-trigger="mapInvalidateTrigger"
+          @map-ready="onMapReady"
+        >
+          <template #default="{ map, leafletModule }">
+            <LMarker
+              v-if="form.location && isMapReady"
+              :lat-lng="[
+                form.location.coordinates[1],
+                form.location.coordinates[0],
+              ]"
+            >
+              <LPopup>Selected Location</LPopup>
+            </LMarker>
+          </template>
+        </MapBase>
+      </div>
+    </UForm>
+
+    <template #footer>
+      <div class="flex justify-end gap-3">
+        <UButton
           type="button"
           @click="$emit('close')"
           class="w-full sm:w-auto"
-          variant="secondary"
+          variant="ghost"
           :disabled="submitting"
         >
           Cancel
-        </FormAppButton>
-        <FormAppButton
+        </UButton>
+        <UButton
           type="submit"
+          form="quick-add-form"
           class="w-full sm:w-auto"
           :disabled="submitting || !form.title.trim()"
+          :loading="submitting"
+          icon="i-heroicons-check"
         >
-          <UiSpinner v-if="submitting" size="sm" class="mr-2" />
-          {{ submitting ? "Creating..." : "Create Task" }}
-        </FormAppButton>
+          Create Task
+        </UButton>
       </div>
-    </form>
-  </div>
+    </template>
+  </UCard>
 </template>
 
 <script setup lang="ts">
-import { ref, computed, watch } from "vue";
-import { useTasks } from "~/composables/useTasks";
-import { useProjects } from "~/composables/useProjects";
+import { ref, computed, watch, nextTick, onMounted, onBeforeUnmount } from 'vue';
+import { useTasks } from '~/composables/useTasks';
+import { useProjects } from '~/composables/useProjects';
 import {
   TaskPriority,
   TaskStatus,
   TaskType,
   type ITask,
   type GeoJSONPoint,
-} from "~/types/task";
-import { useToast } from "vue-toastification";
-import UiLeafletMap from "~/components/ui/LeafletMap.vue";
-import { useLeaflet } from "~/composables/useLeaflet";
+} from '~/types/task';
+import { useAppToast } from '~/composables/useAppToast';
+import MapBase from '~/components/MapBase.vue';
+
 import type {
   Map as LeafletMapInstance,
   LatLngExpression,
   LeafletMouseEvent,
-  Marker as LeafletMarker,
-} from "leaflet";
+} from 'leaflet';
 
 const { createTask } = useTasks();
-const { projects, pending: projectsPending, error: projectsError } = useProjects();
-const toast = useToast();
-const { leaflet: L } = useLeaflet();
+const {
+  projects,
+  pending: projectsPending,
+  error: projectsError,
+} = useProjects();
+const toast = useAppToast();
 
 const emit = defineEmits<{
-  (e: "task-created"): void;
-  (e: "close"): void;
+  (e: 'task-created'): void;
+  (e: 'close'): void;
 }>();
 
 const submitting = ref(false);
+const isMapReady = ref(false);
+const mapBaseRef = ref<InstanceType<typeof MapBase> | null>(null);
+const mapInstance = ref<LeafletMapInstance | null>(null);
+const L = ref<typeof import('leaflet') | null>(null);
 
 interface QuickAddForm {
   title: string;
@@ -242,88 +268,131 @@ interface QuickAddForm {
 }
 
 const form = ref<QuickAddForm>({
-  title: "",
-  description: "",
+  title: '',
+  description: '',
   priority: TaskPriority.Medium,
-  dueDate: "",
+  dueDate: '',
   projectId: null,
   cost: null,
   taskType: TaskType.Office,
   location: undefined,
 });
 
-const today = computed(() => new Date().toISOString().split("T")[0]);
+const today = computed(() => new Date().toISOString().split('T')[0]);
+const projectOptions = computed(() =>
+  projects.value.map((p) => ({ label: p.name, value: p.id }))
+);
 
-const mapInstance = ref<LeafletMapInstance | null>(null);
-const locationMarker = ref<LeafletMarker | null>(null);
-const initialMapZoom = 13;
-const initialMapCenter = ref<LatLngExpression>([51.505, -0.09]);
+// Map configuration
+const mapZoom = ref(10);
+const mapCenter = ref<LatLngExpression>([0.0, 38.0]);
+const mapInvalidateTrigger = ref(0);
 
-// --- UPDATED with robust error handling ---
-const onMapReady = (map: LeafletMapInstance) => {
+const onMapReady = (
+  map: LeafletMapInstance,
+  leafletModule: typeof import('leaflet')
+) => {
+  console.log('QuickAddTask: Map ready');
   mapInstance.value = map;
-  if (navigator.geolocation) {
-    navigator.geolocation.getCurrentPosition(
-      (position) => {
-        const lat = position.coords.latitude;
-        const lng = position.coords.longitude;
-        initialMapCenter.value = [lat, lng];
-        map.setView([lat, lng], initialMapZoom);
-      },
-      (error) => {
-        console.warn(`Geolocation error: ${error.message}. Using default map center.`);
-      }
-    );
-  } else {
-    console.warn("Geolocation is not supported by this browser.");
-  }
+  L.value = leafletModule;
+  isMapReady.value = true;
+
+  // Attach click handler when map is ready
+  map.on('click', handleMapClick);
+  console.log('QuickAddTask: Click handler attached to map');
 };
 
 const handleMapClick = (e: LeafletMouseEvent) => {
-  if (!L.value || !mapInstance.value) return;
-  const coords: [number, number] = [e.latlng.lng, e.latlng.lat];
-  form.value.location = { type: "Point", coordinates: coords };
-
-  if (!locationMarker.value) {
-    locationMarker.value = L.value.marker(e.latlng).addTo(mapInstance.value);
-  } else {
-    locationMarker.value.setLatLng(e.latlng);
+  if (!isMapReady.value || !mapInstance.value || !L.value) {
+    console.warn('QuickAddTask: Map click ignored - map not ready');
+    return;
   }
-  locationMarker.value
-    .bindPopup(`Selected: Lat ${e.latlng.lat.toFixed(4)}, Lng ${e.latlng.lng.toFixed(4)}`)
-    .openPopup();
+
+  const coords: [number, number] = [e.latlng.lng, e.latlng.lat];
+  form.value.location = { type: 'Point', coordinates: coords };
+
+  console.log('QuickAddTask: Location selected:', coords);
 };
 
-watch([mapInstance, L], ([map, leaflet]) => {
-  if (map && leaflet) {
-    map.on("click", handleMapClick);
+onMounted(() => {
+  console.log('QuickAddTask: Component mounted, client-side:', process.client);
+
+  // Try to get user location for better UX
+  if (process.client && navigator?.geolocation) {
+    navigator.geolocation.getCurrentPosition(
+      (pos) => {
+        console.log(
+          'QuickAddTask: Got user location:',
+          pos.coords.latitude,
+          pos.coords.longitude
+        );
+        mapCenter.value = [pos.coords.latitude, pos.coords.longitude];
+      },
+      (error) => {
+        console.log(
+          'QuickAddTask: Geolocation error (using default center):',
+          error.message
+        );
+      }
+    );
   }
 });
 
+// Watch for task type changes
 watch(
   () => form.value.taskType,
-  (newType) => {
+  (newType, oldType) => {
+    console.log('QuickAddTask: Task type changed from', oldType, 'to', newType);
+
     if (newType === TaskType.Office) {
       form.value.location = undefined;
-      if (locationMarker.value && mapInstance.value) {
-        locationMarker.value.remove();
-        locationMarker.value = null;
-      }
+      console.log('QuickAddTask: Cleared location for Office task');
+    } else if (newType === TaskType.Field) {
+      // Trigger map size invalidation when switching to Field task
+      nextTick(() => {
+        mapInvalidateTrigger.value++;
+        console.log(
+          'QuickAddTask: Triggered map invalidation after switching to Field task'
+        );
+      });
     }
   }
 );
 
+onBeforeUnmount(() => {
+  console.log('QuickAddTask: Component unmounting');
+
+  if (mapInstance.value) {
+    mapInstance.value.off('click', handleMapClick);
+    console.log('QuickAddTask: Click handler removed');
+  }
+});
+
 const submitTask = async () => {
-  if (!form.value.title.trim() || submitting.value) return;
+  if (!form.value.title.trim() || submitting.value) {
+    console.warn('QuickAddTask: Submit blocked - invalid form state');
+    return;
+  }
 
   if (form.value.taskType === TaskType.Field && !form.value.location) {
-    toast.error("Please pick a location on the map for Field tasks.");
+    console.warn('QuickAddTask: Submit blocked - Field task without location');
+    toast.add({
+      title: 'Location Required',
+      description: 'Please pick a location on the map for Field tasks.',
+      color: 'red',
+      icon: 'i-heroicons-map-pin',
+    });
     return;
   }
 
   submitting.value = true;
+  console.log('QuickAddTask: Submitting task:', {
+    title: form.value.title,
+    taskType: form.value.taskType,
+    hasLocation: !!form.value.location,
+  });
+
   try {
-    // The taskData object is already correctly structured for the updated API
     const taskData: Partial<ITask> = {
       title: form.value.title.trim(),
       description: form.value.description.trim() || undefined,
@@ -339,27 +408,36 @@ const submitTask = async () => {
     };
 
     await createTask(taskData);
-    emit("task-created");
-    toast.success("Task created successfully!");
+    emit('task-created');
 
+    console.log('QuickAddTask: Task created successfully');
+    toast.add({
+      title: 'Task Created!',
+      description: 'Your task has been added successfully.',
+      color: 'green',
+      icon: 'i-heroicons-check-circle',
+    });
+
+    // Reset form
     form.value = {
-      title: "",
-      description: "",
+      title: '',
+      description: '',
       priority: TaskPriority.Medium,
-      dueDate: "",
+      dueDate: '',
       projectId: null,
       cost: null,
       taskType: TaskType.Office,
       location: undefined,
     };
-    if (locationMarker.value && mapInstance.value) {
-      locationMarker.value.remove();
-      locationMarker.value = null;
-    }
   } catch (error: any) {
-    console.error("Error creating task:", error);
-    const errorMessage = error.data?.message || "An unexpected error occurred.";
-    toast.error(`Error creating task: ${errorMessage}`);
+    console.error('QuickAddTask: Error creating task:', error);
+    const errorMessage = error.data?.message || 'An unexpected error occurred.';
+    toast.add({
+      title: 'Error Creating Task',
+      description: `Failed to create task: ${errorMessage}`,
+      color: 'red',
+      icon: 'i-heroicons-exclamation-triangle',
+    });
   } finally {
     submitting.value = false;
   }

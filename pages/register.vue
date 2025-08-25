@@ -377,7 +377,6 @@ useSeoMeta({
 
 // Protect guest routes
 definePageMeta({
-  middleware: ["guest"],
   layout: "auth",
 });
 

@@ -1,220 +1,164 @@
-// composables/useAuth.ts
-import { ref, computed, readonly, watch } from 'vue';
-import { useCookie } from '#app';
-import { navigateTo } from '#app';
-import { useNuxtApp } from '#app';
-import { useNotifier } from '~/composables/useNotifier';
+// C:/Users/HomePC/taskforge-nuxt/composables/useAuth.ts
+import { computed, readonly, ref } from 'vue';
+import { useCookie, navigateTo, useState, useFetch } from '#app';
+import { useAppToast } from '~/composables/useAppToast';
+import type { IUser } from '~/types/user';
 
-interface User {
-  id: string;
-  role: string;
-  email: string;
-  name?: string;
-  profilePhoto?: string;
-}
-
-const user = ref<User | null>(null);
-const loading = ref(false);
-const initialized = ref(false);
-const notifier = useNotifier();
+// Use Nuxt's useState for state that is shared across components and persists through SSR
+const useUser = () => useState<IUser | null>('user', () => null);
+const useAuthInitialized = () =>
+  useState<boolean>('auth-initialized', () => false);
 
 export const useAuth = () => {
+  const user = useUser();
+  const initialized = useAuthInitialized();
+  const authToken = useCookie<string | null>('auth_token');
+  const toast = useAppToast();
+  const loading = ref(false); // Manages loading state for login/register actions
+
   const isAuthenticated = computed(() => !!user.value);
   const isAdmin = computed(() => user.value?.role === 'admin');
-  const isTeamManager = computed(() => user.value?.role === 'manager');
-  const isFieldOfficer = computed(() => user.value?.role === 'field_officer');
+  const isManager = computed(() => user.value?.role === 'manager');
   const isDispatcher = computed(() => user.value?.role === 'dispatcher');
+  // canManageSOPs depends on other roles being correctly defined
+  const canManageSOPs = computed(() => isAdmin.value || isManager.value || isDispatcher.value); // Added isDispatcher
 
-  const setAuthenticatedUser = (userData: User) => {
-    user.value = userData;
-    initialized.value = true;
-    console.log('[useAuth] setAuthenticatedUser: User state set:', userData.id, userData.role, 'Name:', userData.name);
-  };
 
-  const clearUser = () => {
+  const clearState = () => {
     user.value = null;
-    initialized.value = true;
-    useCookie('auth_token').value = null;
-    console.log('[useAuth] clearUser: User state cleared.');
+    authToken.value = null;
+    initialized.value = false; // Reset initialized state on logout
   };
 
-  const fetchUser = async (): Promise<boolean> => {
-    console.log("useAuth: fetchUser started. Current state - user:", user.value?.id || "null", "initialized:", initialized.value);
-    if (loading.value) {
-      console.log("useAuth: fetchUser skipped (already loading, awaiting previous fetch).");
-      return await new Promise(resolve => {
-        const unwatch = watch(loading, (newVal) => {
-          if (!newVal) { unwatch(); resolve(!!user.value); }
-        });
-      });
+  /**
+   * Fetches the current user based on the auth token.
+   * This function is now memoized and will only run once per application load.
+   */
+  const fetchUser = async () => {
+    if (initialized.value) {
+      return; // Skips the fetch if we've already tried.
     }
-
-    if (initialized.value && user.value && user.value.name && user.value.email) {
-      console.log("useAuth: fetchUser skipped (already fully hydrated with user and full data).");
-      return true;
-    }
-
-    loading.value = true;
-    let success = false;
-
-    try {
-      if (process.server) {
-        const nuxtApp = useNuxtApp();
-        const event = nuxtApp.ssrContext?.event;
-        if (event && (event.context as any)?.user) {
-          const contextUser = (event.context as any).user;
-          user.value = typeof contextUser.toJSON === 'function' ? contextUser.toJSON() : { ...contextUser };
-          console.log("useAuth: fetchUser hydrated from SSR context. User:", user.value?.id, user.value?.role, 'Name:', user.value?.name);
-          success = true;
-          return true;
-        }
-        console.log("useAuth: SSR context had no user. Client will try API.");
-      }
-
-      console.log("useAuth: Calling /api/auth/me for user data (client or unauthenticated SSR fallback).");
-      const response: { statusCode: number; message: string; user?: User } = await $fetch("/api/auth/me", {
-        method: "GET",
-        credentials: "include"
-      });
-
-      if (response.statusCode === 200 && response.user) {
-        user.value = response.user;
-        console.log("useAuth: fetchUser successful via API. User:", user.value.id, user.value.role, 'Name:', user.value.name);
-        success = true;
-        return true;
-      } else {
-        console.warn("useAuth: API response for /api/auth/me missing user data or non-200 status:", response);
-        clearUser();
-        return false;
-      }
-
-    } catch (e: any) {
+    
+    // Check for token first to avoid unnecessary API call
+    if (!authToken.value) {
       user.value = null;
-      const errorMessage = e.response?._data?.message || e.message || "Unknown error during fetchUser.";
-      console.error("useAuth: fetchUser failed:", errorMessage);
-      if (process.client) { notifier.error({ title: "Session Expired", description: "Please log in again." }); }
-      return false;
-    } finally {
-      loading.value = false;
       initialized.value = true;
-      console.log(`useAuth: fetchUser finished. Final user: ${user.value?.id || 'null'}. Success: ${success}.`);
+      return;
+    }
+
+    try {
+      // useFetch is the idiomatic way to fetch data in Nuxt 3.
+      // It automatically handles SSR data transfer ("dehydration").
+      const { data } = await useFetch('/api/auth/me'); // This implicitly sends cookies via server context
+      user.value = data.value?.user ?? null;
+      console.log('useAuth: fetchUser completed. User:', user.value ? user.value.email : 'null');
+    } catch (error) {
+      console.error('useAuth: Failed to fetch user:', error);
+      user.value = null; // Ensure user is null on error
+      // Optionally clear cookie if token is definitively invalid
+      // deleteCookie(event, authToken.name); // Not accessible here directly, auth middleware should do it
+    } finally {
+      // IMPORTANT: Mark as initialized regardless of success or failure.
+      // This prevents repeated API calls on subsequent navigation.
+      initialized.value = true;
     }
   };
 
-  const register = async (userData: { name: string; email: string; password: string; role?: string }): Promise<boolean> => {
+  // --- Register function ---
+  const register = async (userData: { name: string; email: string; password: string }) => {
+    if (loading.value) return;
     loading.value = true;
     try {
-      console.log("useAuth: Register started for:", userData.email);
-      const response: { statusCode: number; message: string; user?: User } = await $fetch("/api/auth/register", {
-        method: "POST",
+      console.log('useAuth: Attempting user registration for:', userData.email);
+      // The register API route will handle user creation and potentially login/redirect.
+      // We don't expect a direct user object back from this endpoint for security.
+      await $fetch('/api/auth/register', {
+        method: 'POST',
         body: userData,
       });
-
-      if (response.statusCode === 200 && response.user) {
-        user.value = response.user;
-        initialized.value = true;
-        console.log("useAuth: Register successful. User state updated. Redirecting to dashboard.");
-        notifier.success({ title: "Welcome!", description: "Registration successful. You are now logged in." });
-        if (process.client) { window.location.href = '/dashboard'; } else { await navigateTo("/dashboard"); }
-        return true;
-      } else {
-        const msg = response?.message || "Registration failed (API response problem).";
-        console.error("useAuth: Register API responded unexpectedly:", response.statusCode, response);
-        notifier.error({ title: "Registration Failed", description: msg });
-        throw new Error(msg);
-      }
+      // Assuming successful response means user is created, and the client will be redirected.
+      console.log('useAuth: Registration API call successful.');
+      // The page component will handle success toasts and redirects.
     } catch (error: any) {
-      user.value = null;
-      const msg = error?.response?._data?.message || error?.message || "Unknown error during registration.";
-      console.error("useAuth: Register failed:", msg);
-      notifier.error({ title: "Registration Failed", description: msg });
-      throw error;
+      console.error('useAuth: Registration failed:', error);
+      const msg = error.data?.message || 'Registration failed.';
+      toast.add({
+        title: 'Registration Failed',
+        description: msg,
+        color: 'red',
+        icon: 'i-heroicons-exclamation-triangle',
+      });
+      throw error; // Re-throw to allow the page component to handle loading state
     } finally {
       loading.value = false;
-      console.log("useAuth: Register finished.");
     }
   };
 
-  const login = async (credentials: { email: string; password: string }): Promise<boolean> => {
+  const login = async (credentials: { email: string; password: string }) => {
+    if (loading.value) return;
     loading.value = true;
     try {
-      console.log("useAuth: Login started for:", credentials.email);
-      const response: { statusCode: number; message: string; user?: User } = await $fetch("/api/auth/login", {
-        method: "POST",
+      console.log('useAuth: Attempting user login for:', credentials.email);
+      const response = await $fetch<{ user: IUser }>('/api/auth/login', {
+        method: 'POST',
         body: credentials,
       });
 
-      if (response.statusCode === 200 && response.user) {
-        user.value = response.user;
-        initialized.value = true;
-        console.log("useAuth: Login successful. User state updated. Redirecting to dashboard.");
-        notifier.success({ title: "Welcome back!", description: "Successfully signed in." });
-        if (process.client) { window.location.href = '/dashboard'; } else { await navigateTo("/dashboard"); }
+      if (response.user) {
+        initialized.value = false; // Force re-fetch user context after successful login
+        user.value = response.user; // Set user directly
+        toast.add({
+          title: 'Welcome back!',
+          description: 'Successfully signed in.',
+          icon: 'i-heroicons-check-circle',
+          color: 'green',
+        });
+        await navigateTo('/dashboard', { replace: true });
         return true;
-      } else {
-        const msg = response?.message || "Login failed (API response problem).";
-        console.error("useAuth: Login API responded unexpectedly:", response.statusCode, response);
-        notifier.error({ title: "Login Failed", description: msg });
-        throw new Error(msg);
       }
+      return false;
     } catch (error: any) {
-      user.value = null;
-      const msg = error?.response?._data?.message || error?.message || "Invalid credentials or server error.";
-      console.error("useAuth: Login failed:", msg);
-      notifier.error({ title: "Login Failed", description: msg });
+      console.error('useAuth: Login failed:', error);
+      const msg = error.data?.message || 'Invalid credentials or server error.';
+      toast.add({
+        title: 'Login Failed',
+        description: msg,
+        icon: 'i-heroicons-exclamation-triangle',
+        color: 'red',
+      });
       throw error;
     } finally {
       loading.value = false;
-      console.log("useAuth: Login finished.");
     }
   };
 
-  const logout = async (): Promise<boolean> => {
-    loading.value = true;
+  const logout = async () => {
     try {
-      console.log("useAuth: Logout started.");
-      const response: { statusCode: number; message: string } = await $fetch("/api/auth/logout", {
-        method: "POST",
-        credentials: 'include'
-      });
-
-      if (response.statusCode === 200) {
-        clearUser();
-        console.log("useAuth: Logout successful. Redirecting to login.");
-        notifier.info({ title: "Logged Out", description: "You have been successfully logged out." });
-        await navigateTo("/login");
-        return true;
-      } else {
-        const msg = response?.message || "Logout failed (API response problem).";
-        console.error("useAuth: Logout API responded unexpectedly:", response.statusCode, response);
-        notifier.error({ title: "Logout Failed", description: msg });
-        throw new Error(msg);
-      }
-    } catch (error: any) {
-      const msg = error?.response?._data?.message || error?.message || "Unknown error during logout.";
-      console.error("useAuth: Logout failed:", msg);
-      notifier.error({ title: "Logout Failed", description: msg });
-      throw error;
+      console.log('useAuth: Attempting logout...');
+      await $fetch('/api/auth/logout', { method: 'POST' });
     } finally {
-      loading.value = false;
-      console.log("useAuth: Logout finished.");
+      clearState(); // Clear all auth state
+      toast.add({
+        title: 'Logged Out',
+        description: 'You have been successfully logged out.',
+        color: 'blue',
+        icon: 'i-heroicons-information-circle',
+      });
+      await navigateTo('/login');
     }
   };
 
   return {
     user: readonly(user),
-    loading: readonly(loading),
-    initialized: readonly(initialized),
     isAuthenticated,
     isAdmin,
-    isTeamManager,
-    isFieldOfficer,
+    isManager,
     isDispatcher,
-    register,
+    canManageSOPs, // Expose canManageSOPs
+    loading: readonly(loading),
+    fetchUser,
+    register, // <--- CRITICAL: Make sure `register` is explicitly returned here
     login,
     logout,
-    fetchUser,
-    setAuthenticatedUser,
-    clearUser,
   };
 };

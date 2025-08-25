@@ -121,24 +121,26 @@
   </div>
 </template>
 
-<script setup>
-import { z } from "zod";
+<script setup lang="ts">
+import { ref, reactive, nextTick, onMounted } from 'vue'; // Added reactive
+import { z } from 'zod';
+import type { FormSubmitEvent } from '#ui/types'; // For UForm @submit event type
+import { useAppToast } from '~/composables/useAppToast'; // CORRECTED: useAppToast for consistency
 
 // Meta and SEO
 useSeoMeta({
-  title: "Reset Password - TaskForge",
-  description: "Reset your TaskForge account password.",
-  robots: "noindex, nofollow",
+  title: 'Reset Password - TaskForge',
+  description: 'Reset your TaskForge account password.',
+  robots: 'noindex, nofollow',
 });
 
 // Protect guest routes
 definePageMeta({
-  middleware: ["guest"],
-  layout: "auth",
+  layout: 'auth',
 });
 
 // Composables
-const toast = useToast();
+const toast = useAppToast(); // CORRECTED: Use useAppToast
 
 // Reactive state
 const loading = ref(false);
@@ -147,46 +149,50 @@ const formRef = ref();
 // Validation schema
 const forgotPasswordSchema = z.object({
   email: z
-    .string({ required_error: "Email is required" })
-    .min(1, "Email is required")
-    .email("Please enter a valid email address")
-    .max(254, "Email is too long"),
+    .string({ required_error: 'Email is required' })
+    .min(1, 'Email is required')
+    .email('Please enter a valid email address')
+    .max(254, 'Email is too long'),
 });
 
-// Form state
-const formState = ref({
-  email: "",
+// Form state (using reactive for consistency, though ref also works)
+const formState = reactive({ // Changed to reactive
+  email: '',
 });
 
 // Handle form submission
-const handleForgotPassword = async (data) => {
+// CRITICAL FIX: Correctly access event.data.email
+const handleForgotPassword = async (event: FormSubmitEvent<typeof forgotPasswordSchema._type>) => { // Corrected type
   loading.value = true;
 
   try {
-    // Simulate API call - replace with your actual forgot password logic
-    const response = await $fetch("/api/auth/forgot-password", {
-      method: "POST",
+    const emailToReset = event.data.email.toLowerCase().trim(); // CRITICAL FIX: Access event.data.email
+    console.log('Sending reset link for email:', emailToReset);
+
+    const response = await $fetch('/api/auth/forgot-password', {
+      method: 'POST',
       body: {
-        email: data.email.toLowerCase().trim(),
+        email: emailToReset,
       },
     });
 
+    console.log('Forgot password API response:', response); // Log API response for debugging
+
     toast.add({
-      title: "Reset link sent!",
-      description: "Check your email for password reset instructions.",
-      icon: "i-heroicons-check-circle",
-      color: "green",
+      title: 'Reset link sent!',
+      description: 'Check your email for password reset instructions.',
+      icon: 'i-heroicons-check-circle',
+      color: 'green',
       timeout: 5000,
     });
 
-    // Optionally redirect to login
     setTimeout(() => {
-      navigateTo("/login");
+      navigateTo('/login');
     }, 2000);
-  } catch (error) {
-    console.error("Forgot password error:", error);
+  } catch (error: any) { // Type error as 'any' for robust handling
+    console.error('Forgot password error:', error);
 
-    let errorMessage = "Unable to send reset link. Please try again.";
+    let errorMessage = 'Unable to send reset link. Please try again.';
 
     if (error?.data?.message) {
       errorMessage = error.data.message;
@@ -195,10 +201,10 @@ const handleForgotPassword = async (data) => {
     }
 
     toast.add({
-      title: "Unable to send reset link",
+      title: 'Unable to send reset link',
       description: errorMessage,
-      icon: "i-heroicons-exclamation-triangle",
-      color: "red",
+      icon: 'i-heroicons-exclamation-triangle',
+      color: 'red',
       timeout: 5000,
     });
   } finally {

@@ -1,11 +1,15 @@
-// server/db/models/user.ts
-import { Schema, model, Document } from "mongoose";
+// C:/Users/HomePC/taskforge-nuxt/server/db/models/user.ts
+import mongoose, { Schema, model, type Document } from "mongoose";
 import { UserRole } from "~/types/user";
 import type { IUser } from "~/types/user";
 
-export interface IUserModel extends Document, Omit<IUser, 'id'> {
+export interface IUserModel extends Document, Omit<IUser, 'id' | 'password' | 'createdAt' | 'updatedAt'> {
   password?: string;
   googleId?: string;
+  role: UserRole;
+  managedProjects: mongoose.Types.ObjectId[];
+  passwordResetToken?: string; // NEW: Field for storing password reset token
+  passwordResetExpires?: Date; // NEW: Field for storing password reset token expiry
   createdAt: Date;
   updatedAt: Date;
 }
@@ -14,7 +18,13 @@ const userSchema = new Schema<IUserModel>(
   {
     name: { type: String, required: true, trim: true },
     email: { type: String, required: true, unique: true, trim: true, lowercase: true },
-    password: { type: String, required: false, select: false },
+    password: {
+      type: String,
+      select: false,
+      required: function() {
+        return this.provider === 'local';
+      },
+    },
     provider: { type: String, required: true, default: "local", enum: ["local", "google"] },
     googleId: { type: String, unique: true, sparse: true },
     profilePhoto: { type: String },
@@ -24,6 +34,9 @@ const userSchema = new Schema<IUserModel>(
       required: true,
       default: UserRole.FieldOfficer,
     },
+    managedProjects: [{ type: Schema.Types.ObjectId, ref: 'Project' }],
+    passwordResetToken: String, // NEW: Schema field
+    passwordResetExpires: Date, // NEW: Schema field
   },
   {
     timestamps: true,
@@ -34,11 +47,10 @@ const userSchema = new Schema<IUserModel>(
         delete ret._id;
         delete ret.__v;
         delete ret.password;
-        ret.name = ret.name;
-        ret.email = ret.email;
-        ret.role = ret.role;
-        ret.profilePhoto = ret.profilePhoto;
-        ret.provider = ret.provider;
+
+        if (ret.managedProjects && Array.isArray(ret.managedProjects)) {
+            ret.managedProjects = ret.managedProjects.map((id: mongoose.Types.ObjectId) => id.toString());
+        }
         return ret as IUser;
       },
     },
@@ -46,5 +58,4 @@ const userSchema = new Schema<IUserModel>(
   },
 );
 
-// No explicit schema.index({ email: 1 }); needed here if `unique: true` is on the field.
 export const UserModel = model<IUserModel>("User", userSchema);

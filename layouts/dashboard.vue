@@ -58,6 +58,18 @@
             />
             Projects
           </NuxtLink>
+          <!-- NEW: Learning / SOPs Link -->
+          <NuxtLink
+            to="/dashboard/learning"
+            class="flex items-center rounded-lg px-4 py-3 text-slate-300 transition-colors hover:bg-slate-800 hover:text-white"
+            active-class="bg-emerald-500/10 text-emerald-400 font-semibold"
+          >
+            <Icon
+              name="heroicons:academic-cap"
+              class="mr-3 h-5 w-5 shrink-0"
+            />
+            Learning
+          </NuxtLink>
           <NuxtLink
             to="/dashboard/calendar"
             class="flex items-center rounded-lg px-4 py-3 text-slate-300 transition-colors hover:bg-slate-800 hover:text-white"
@@ -141,6 +153,7 @@
             <Icon name="heroicons:bars-3" class="h-6 w-6" />
           </button>
           <div class="flex-1 lg:flex-none">
+            <!-- This could be dynamically updated based on route in the future -->
             <h1 class="text-2xl font-bold text-white">Dashboard</h1>
           </div>
           <div class="flex items-center space-x-4">
@@ -150,10 +163,6 @@
                 class="rounded-md p-2 text-slate-500 transition-colors hover:bg-slate-800 hover:text-white focus:outline-none focus:ring-2 focus:ring-emerald-500"
                 title="Toggle theme"
               >
-                <!--
-                  FIX: Remove .value from colorMode.
-                  In the template, Vue automatically unwraps the Ref.
-                -->
                 <Icon
                   :name="
                     colorMode === 'dark' ? 'heroicons:sun' : 'heroicons:moon'
@@ -192,12 +201,10 @@ import { useColorMode } from "@vueuse/core";
 import { useAuth } from "~/composables/useAuth";
 
 const sidebarOpen = ref(false);
-// Let TypeScript infer the type from the composable, it's well-typed.
 const colorMode = useColorMode();
 const { user, logout, isAdmin } = useAuth();
 
 const toggleTheme = () => {
-  // In the script, you MUST use .value to change the Ref's value.
   colorMode.value = colorMode.value === "dark" ? "light" : "dark";
 };
 

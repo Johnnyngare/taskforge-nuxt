@@ -1,4 +1,5 @@
-// nuxt.config.ts
+// C:/Users/HomePC/taskforge-nuxt/nuxt.config.ts
+
 import { defineNuxtConfig } from "nuxt/config";
 
 export default defineNuxtConfig({
@@ -6,14 +7,12 @@ export default defineNuxtConfig({
   devtools: { enabled: true },
   ssr: true,
 
-  // --- UPDATED ---
-  // Removed '@nuxtjs/leaflet' as we are now using a more performant
-  // composable-based approach to lazy-load the library.
   modules: [
     "@nuxt/ui",
     "@pinia/nuxt",
     "@vueuse/motion/nuxt",
     "@vueuse/nuxt",
+    "@nuxtjs/leaflet", // <--- ADDED: The official Leaflet module
   ],
 
   runtimeConfig: {
@@ -28,9 +27,18 @@ export default defineNuxtConfig({
         process.env.GOOGLE_OAUTH_REDIRECT_URI ||
         "http://localhost:3000/api/auth/google/callback",
       baseUrlPublic: process.env.BASE_URL_PUBLIC || "http://localhost:3000",
+      uploadsBaseUrl: process.env.UPLOADS_BASE_URL || "http://localhost:3000/uploads",
     },
   },
-
+  nitro: {
+    publicAssets: [
+      {
+        baseURL: '/uploads',
+        dir: './uploads',
+        maxAge: 60 * 60 * 24 * 365,
+      }
+    ]
+  },
   ui: {
     global: true,
     icons: ["heroicons", "simple-icons"],
@@ -45,11 +53,12 @@ export default defineNuxtConfig({
     storageKey: "taskforge-color-mode",
   },
 
-  // --- UPDATED ---
-  // Removed 'leaflet/dist/leaflet.css'.
-  // The CSS is now imported directly within our LeafletMap.vue component.
-  // This ensures it's only loaded when a map is actually on the page.
-  css: ["~/assets/css/main.css"],
+  // CSS: The @nuxtjs/leaflet module handles `leaflet.css` automatically.
+  // REMOVE any custom `leaflet/dist/leaflet.css` entries.
+  css: [
+    "~/assets/css/main.css",
+    // REMOVED: "leaflet/dist/leaflet.css", // Module handles this
+  ],
 
   postcss: {
     plugins: {
@@ -78,15 +87,19 @@ export default defineNuxtConfig({
           rel: "stylesheet",
           href: "https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap",
         },
+        // REMOVED: Any direct <link> tags for leaflet.css (e.g., CDN link)
+        // REMOVED: Any inline <style> tags for leaflet CSS (our diagnostic fix)
       ],
+      style: [], // Ensure this is empty or only contains non-Leaflet inline styles
     },
   },
 
   plugins: [],
 
-  // --- REMOVED OBSOLETE CONFIGURATIONS ---
-  // The 'build' and 'vite' configurations related to '@vue-leaflet/vue-leaflet'
-  // have been removed. They were workarounds for a different library that we
-  // are no longer using. Our current composable-based approach does not
-  // require any special build or Vite configuration.
+  // --- NEW: Leaflet module specific configuration (optional, check module docs for options) ---
+  // leaflet: {
+  //   // No explicit configuration might be needed for basic usage,
+  //   // but this is where you'd put global Leaflet options if needed.
+  //   // e.g., default options for L.Map.
+  // }
 });

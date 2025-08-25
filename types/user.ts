@@ -1,19 +1,18 @@
 // types/user.ts
 export enum UserRole {
   Admin = "admin",
-  TeamManager = "manager", // Ensure this matches the string used in DB/JWT
+  Manager = "manager", 
   FieldOfficer = "field_officer",
   Dispatcher = "dispatcher",
-  Viewer = "viewer" // Add if you have this role
 }
 
 export interface IUser {
   id: string;
   name: string;
   email: string;
-  role: UserRole;
+  role: UserRole; // Using the enum for type safety
   profilePhoto?: string | null;
-  provider?: "google" | "local";
+  provider?: "google" | "local"; // To distinguish login methods
   createdAt?: string;
   updatedAt?: string;
 }
