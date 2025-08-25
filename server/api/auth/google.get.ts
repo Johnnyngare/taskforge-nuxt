@@ -1,13 +1,13 @@
-// server/api/auth/google.get.ts
+// C:/Users/HomePC/taskforge-nuxt/server/api/auth/google.get.ts
 import { defineEventHandler, sendRedirect, createError } from "h3";
 import { URLSearchParams } from 'url'; // Ensure this import is present
 
 export default defineEventHandler(async (event) => {
   try {
     const config = useRuntimeConfig(event);
-    // Access runtimeConfig variables with the exact casing from nuxt.config.ts
-    const GOOGLE_CLIENT_ID = config.GOOGLE_CLIENT_ID;
-    const GOOGLE_OAUTH_REDIRECT_URI = config.public.GOOGLE_OAUTH_REDIRECT_URI;
+    // CRITICAL FIX: Access public runtimeConfig variables using their camelCase names
+    const GOOGLE_CLIENT_ID = config.public.googleClientId; // CORRECTED ACCESS
+    const GOOGLE_OAUTH_REDIRECT_URI = config.public.googleOauthRedirectUri; // CORRECTED ACCESS
 
     // --- Validation ---
     if (!GOOGLE_CLIENT_ID) {

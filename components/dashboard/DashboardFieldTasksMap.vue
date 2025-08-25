@@ -1,17 +1,17 @@
-<!-- C:/Users/HomePC/taskforge-nuxt/components/dashboard/DashboardFieldTasksMap.vue -->
+<!-- components/dashboard/DashboardFieldTasksMap.vue -->
 <template>
   <div class="rounded-xl border border-gray-200 dark:border-slate-700 bg-white dark:bg-slate-800 p-6 shadow-md">
     <h2 class="mb-4 text-xl font-semibold text-gray-900 dark:text-white">Field Task Map</h2>
 
     <div v-if="fieldTasksWithValidLocation.length > 0">
       <MapBase
+        ref="mapBaseRef"
         height="400px"
         :zoom="mapZoom"
         :center="mapCenter"
         :invalidate-size-trigger="mapInvalidateTrigger"
         @map-ready="onMapBaseReady"
       >
-        <!-- Slot content for markers directly using @nuxtjs/leaflet components -->
         <template #default="{ map, leafletModule }">
           <LMarker
             v-for="task in fieldTasksWithValidLocation"
@@ -19,10 +19,16 @@
             :lat-lng="[task.location!.coordinates[1], task.location!.coordinates[0]]"
           >
             <LPopup>
-              <b>{{ task.title }}</b><br>
+              <b>{{ task.title }}</b><br />
               {{ task.description || '' }}
-              <br>
-              <UButton v-if="map" size="xs" variant="ghost" class="mt-1" @click="focusAndOpenPopup(task, map, leafletModule)">
+              <br />
+              <UButton
+                v-if="map && leafletModule"
+                size="xs"
+                variant="ghost"
+                class="mt-1"
+                @click="focusAndOpen(task, map)"
+              >
                 View Task
               </UButton>
             </LPopup>
@@ -37,27 +43,14 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, watch, nextTick } from 'vue';
+import { ref, computed, watch, nextTick, onBeforeUnmount } from 'vue';
 import { TaskType, type ITask } from '~/types/task';
-// REMOVED: import { useLeaflet } from '~/composables/useLeaflet'; // No longer needed
-import MapBase from '~/components/MapBase.vue'; // <--- NEW: Import our base map wrapper
-import {
-  LMap,
-  LTileLayer,
-  LMarker,
-  LPopup,
-  LControlZoom,
-  LIcon // Import @nuxtjs/leaflet components directly for use in template slot
-} from '@nuxtjs/leaflet'; // <--- Import from the module itself
-import type {
-  Map as LeafletMapInstance,
-  LatLngExpression,
-} from 'leaflet'; // Still use types from 'leaflet'
+import MapBase from '~/components/MapBase.vue';
+import type { Map as LeafletMapInstance, LatLngExpression } from 'leaflet';
 
-const props = defineProps<{ tasks: ITask[] | null; }>();
+const props = defineProps<{ tasks: ITask[] | null }>();
 
-// No longer directly calling useLeaflet() here. MapBase handles the L module loading.
-// const { leaflet: L } = useLeaflet();
+const mapBaseRef = ref<InstanceType<typeof MapBase> | null>(null);
 
 const fieldTasksWithValidLocation = computed(() => {
   if (!Array.isArray(props.tasks)) return [];
@@ -66,101 +59,199 @@ const fieldTasksWithValidLocation = computed(() => {
       task.taskType === TaskType.Field &&
       task.location?.type === 'Point' &&
       Array.isArray(task.location.coordinates) &&
-      task.location.coordinates.length === 2
+      task.location.coordinates.length === 2 &&
+      typeof task.location.coordinates[0] === 'number' &&
+      typeof task.location.coordinates[1] === 'number' &&
+      !isNaN(task.location.coordinates[0]) &&
+      !isNaN(task.location.coordinates[1]) &&
+      task.location.coordinates[1] >= -90 && task.location.coordinates[1] <= 90 &&
+      task.location.coordinates[0] >= -180 && task.location.coordinates[0] <= 180
   );
 });
 
 const mapInstance = ref<LeafletMapInstance | null>(null);
-const L_module_object = ref<typeof import('leaflet') | null>(null); // Store the Leaflet module from MapBase
+const L_module_object = ref<typeof import('leaflet') | null>(null);
+const isMapReady = ref(false);
 
-const mapZoom = ref(2); // For global overview or adjusted by fitBounds
-const mapCenter = ref<LatLngExpression>([20, 0]); // Default to global view
+const mapZoom = ref(2);
+const mapCenter = ref<LatLngExpression>([20, 0]);
+const mapInvalidateTrigger = ref(0);
 
-const mapInvalidateTrigger = ref(0); // Trigger for MapBase to call invalidateSize
+// Store initial tasks to process once map is ready
+const pendingTasksToProcess = ref<ITask[]>([]);
 
-const markersMap = ref<Map<string, typeof LMarker>>(new Map()); // Using LMarker type if useful
-
-const onMapBaseReady = (map: LeafletMapInstance, L: typeof import('leaflet')) => {
+function onMapBaseReady(map: LeafletMapInstance, L_module: typeof import('leaflet')) {
+  console.log('DashboardFieldTasksMap: MapBase ready event received');
+  
   mapInstance.value = map;
-  L_module_object.value = L;
-  console.log('DashboardFieldTasksMap: MapBase reported ready.');
-  // Now that mapInstance and L are ready, we can process initial tasks
+  L_module_object.value = L_module;
+  isMapReady.value = true;
+  
+  // Process any pending tasks
+  if (pendingTasksToProcess.value.length > 0) {
+    console.log('DashboardFieldTasksMap: Processing pending tasks:', pendingTasksToProcess.value.length);
+    processTasks(pendingTasksToProcess.value);
+    pendingTasksToProcess.value = [];
+  }
+  
+  // Process current tasks
   processTasks(fieldTasksWithValidLocation.value);
-};
+  
+  // Now we can safely watch for task changes
+  setupTaskWatcher();
+}
 
-// Function to process tasks (add markers, fit bounds)
-const processTasks = (tasks: ITask[]) => {
-  if (!L_module_object.value || !mapInstance.value) return;
+let taskWatcherStop: (() => void) | null = null;
 
-  const L = L_module_object.value; // Use the stored L object
+function setupTaskWatcher() {
+  // Ensure we only set up the watcher once
+  if (taskWatcherStop) {
+    console.log('DashboardFieldTasksMap: Task watcher already set up');
+    return;
+  }
 
-  // The LMarker components in the template handle adding/removing markers reactively.
-  // We only need to manage fitting bounds.
+  console.log('DashboardFieldTasksMap: Setting up task watcher');
+  
+  taskWatcherStop = watch(
+    fieldTasksWithValidLocation,
+    (newTasks, oldTasks) => {
+      console.log('DashboardFieldTasksMap: Tasks changed:', { 
+        newCount: newTasks.length, 
+        oldCount: oldTasks?.length || 0,
+        mapReady: isMapReady.value 
+      });
+      
+      if (isMapReady.value) {
+        nextTick(() => processTasks(newTasks));
+      } else {
+        console.log('DashboardFieldTasksMap: Map not ready, storing tasks for later processing');
+        pendingTasksToProcess.value = [...newTasks];
+      }
+    },
+    { deep: true }
+  );
+}
 
-  if (tasks.length === 0) {
+function processTasks(tasks: ITask[]) {
+  if (!isMapReady.value || !L_module_object.value || !mapInstance.value) {
+    console.warn('DashboardFieldTasksMap: processTasks called but map not ready', {
+      mapReady: isMapReady.value,
+      hasL: !!L_module_object.value,
+      hasMap: !!mapInstance.value
+    });
+    
+    // Store tasks for processing when map becomes ready
+    pendingTasksToProcess.value = [...tasks];
+    return;
+  }
+
+  const L_val = L_module_object.value;
+  console.log('DashboardFieldTasksMap: Processing tasks:', tasks.length);
+
+  if (!tasks.length) {
     mapInstance.value.setView(mapCenter.value, mapZoom.value);
     return;
   }
 
-  const latLngs: LatLngExpression[] = tasks.map(task =>
-    [task.location!.coordinates[1], task.location!.coordinates[0]]
-  );
-
-  if (latLngs.length > 0) {
-    const bounds = L.latLngBounds(latLngs);
-    if (bounds.isValid()) {
-      mapInstance.value.fitBounds(bounds, { padding: [50, 50], maxZoom: 14 });
+  try {
+    // Validate coordinates before creating bounds
+    const validLatLngs: LatLngExpression[] = [];
+    
+    for (const task of tasks) {
+      if (task.location?.coordinates) {
+        const [lng, lat] = task.location.coordinates;
+        
+        // Additional validation
+        if (
+          typeof lat === 'number' && typeof lng === 'number' &&
+          !isNaN(lat) && !isNaN(lng) &&
+          lat >= -90 && lat <= 90 &&
+          lng >= -180 && lng <= 180
+        ) {
+          validLatLngs.push([lat, lng]);
+        } else {
+          console.warn('DashboardFieldTasksMap: Invalid coordinates for task:', task.title, { lat, lng });
+        }
+      }
     }
-  }
-};
 
-// Watch for changes in tasks prop to update map markers/bounds
-watch(
-  fieldTasksWithValidLocation,
-  (newTasks) => {
-    // When tasks change, ensure map is ready before processing
-    if (mapInstance.value && L_module_object.value) {
-      nextTick(() => processTasks(newTasks));
+    if (validLatLngs.length === 0) {
+      console.warn('DashboardFieldTasksMap: No valid coordinates found');
+      mapInstance.value.setView(mapCenter.value, mapZoom.value);
+      return;
+    }
+
+    console.log('DashboardFieldTasksMap: Creating bounds with', validLatLngs.length, 'valid coordinates');
+
+    if (validLatLngs.length === 1) {
+      // Single point - just center on it
+      mapInstance.value.setView(validLatLngs[0], 14);
     } else {
-      // If map not ready, process them once onMapBaseReady fires
-      console.log('DashboardFieldTasksMap: Map not ready yet, tasks will be processed when map becomes ready.');
+      // Multiple points - fit bounds
+      const bounds = L_val.latLngBounds(validLatLngs);
+      
+      if (bounds.isValid()) {
+        console.log('DashboardFieldTasksMap: Fitting bounds for', validLatLngs.length, 'locations');
+        mapInstance.value.fitBounds(bounds, { 
+          padding: [50, 50], 
+          maxZoom: 14,
+          animate: true
+        });
+      } else {
+        console.warn('DashboardFieldTasksMap: Created bounds are not valid');
+        // Fallback to center on first valid coordinate
+        mapInstance.value.setView(validLatLngs[0], 10);
+      }
     }
-  },
-  { deep: true, immediate: true } // immediate: true to process initial tasks
-);
+  } catch (error) {
+    console.error('DashboardFieldTasksMap: Error processing tasks:', error);
+    // Fallback to default view
+    mapInstance.value.setView(mapCenter.value, mapZoom.value);
+  }
+}
 
-const focusAndOpenPopup = (task: ITask, map: LeafletMapInstance, L: typeof import('leaflet')) => {
-  if (!map || !task.location || !task.id || !L) return;
+function focusAndOpen(task: ITask, map: LeafletMapInstance) {
+  if (!map || !task.location) {
+    console.warn('DashboardFieldTasksMap: focusAndOpen called with invalid params');
+    return;
+  }
+  
+  const [lng, lat] = task.location.coordinates;
+  
+  // Validate coordinates
+  if (
+    typeof lat === 'number' && typeof lng === 'number' &&
+    !isNaN(lat) && !isNaN(lng) &&
+    lat >= -90 && lat <= 90 &&
+    lng >= -180 && lng <= 180
+  ) {
+    const latLng: LatLngExpression = [lat, lng];
+    console.log('DashboardFieldTasksMap: Focusing on task:', task.title, 'at', latLng);
+    map.setView(latLng, 15);
+  } else {
+    console.warn('DashboardFieldTasksMap: Invalid coordinates for focus:', { lat, lng });
+  }
+}
 
-  const latLng: LatLngExpression = [task.location.coordinates[1], task.location.coordinates[0]];
-  map.setView(latLng, 15); // Zoom to task location
-
-  // This part is trickier when markers are implicitly managed by LMarker components.
-  // We might need a way to access the native Leaflet marker instance from the LMarker component.
-  // For simplicity, for now, if LMarker components add a ref, you'd access them.
-  // A common pattern is to give LMarker components a ref or access them via a data structure.
-  // For basic popups, just setting the view is often enough if the LMarker is already there.
-
-  // To truly open a specific marker's popup, you'd need a ref on the LMarker.
-  // <LMarker ref="markerRefs[task.id]" ...>
-  // Then: markerRefs.value[task.id]?.leafletObject?.openPopup();
-  // For this example, we just set view and implicitly assume popup interaction.
-};
-
+// Cleanup watcher on unmount
+onBeforeUnmount(() => {
+  if (taskWatcherStop) {
+    taskWatcherStop();
+    console.log('DashboardFieldTasksMap: Task watcher cleaned up');
+  }
+});
 
 defineExpose({
-  // Expose focusOnTask, but now it needs the L_module_object
-  focusOnTask: (task: ITask) => {
-    // When external component calls focusOnTask, use our stored map/L instances
-    if (mapInstance.value && L_module_object.value && task.location) {
-      focusAndOpenPopup(task, mapInstance.value, L_module_object.value);
+  focusOnTask(task: ITask) {
+    if (isMapReady.value && mapInstance.value && task.location) {
+      focusAndOpen(task, mapInstance.value);
     } else {
-      console.warn('DashboardFieldTasksMap: Attempted to focus on task but map not ready.');
+      console.warn('DashboardFieldTasksMap: focusOnTask called before map ready or invalid task');
     }
   },
-  triggerInvalidateSize: () => {
-    mapInvalidateTrigger.value++; // Increment to trigger watch in MapBase
-    console.log('DashboardFieldTasksMap: invalidateSize triggered for map.');
-  }
+  triggerInvalidateSize() {
+    mapBaseRef.value?.triggerInvalidateSize();
+    console.log('DashboardFieldTasksMap: invalidateSize triggered via ref.');
+  },
 });
 </script>

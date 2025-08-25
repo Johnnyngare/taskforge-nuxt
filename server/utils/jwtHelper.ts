@@ -1,78 +1,92 @@
-// server/utils/jwtHelper.ts
+// C:/Users/HomePC/taskforge-nuxt/server/utils/jwtHelper.ts
 
 // Declare jwt as a variable that will hold the jsonwebtoken module.
-// It will only be assigned if running on the server.
-let jwtPromise: Promise<typeof import('jsonwebtoken') | null> = Promise.resolve(null);
+let jwtModulePromise: Promise<typeof import('jsonwebtoken').Module | null> = Promise.resolve(null); // Changed type to .Module
 
 // Conditionally load jsonwebtoken ONLY on the server side using dynamic import.
-// This is the correct way to import CJS modules conditionally in ESM.
 if (process.server) {
-  // Use a dynamic import to load jsonwebtoken. This returns a Promise.
-  // The 'default' property is accessed because CJS modules imported dynamically
-  // in ESM often expose their exports under a 'default' property.
-  jwtPromise = import('jsonwebtoken')
-    .then(module => module.default || module) // Access .default if it's there, else use module directly
+  jwtModulePromise = import('jsonwebtoken')
+    .then(module => {
+      // Access .default if it's there (common for CJS in ESM), else use module directly
+      return (module as any).default || module;
+    })
     .catch(e => {
       console.error('FATAL (server-side): Could not load jsonwebtoken using dynamic import:', (e as Error).message);
       return null;
     });
 }
 
-// This interface is only used on the server
-interface JwtPayload {
+// Interface for what we expect in the JWT payload
+interface AppJwtPayload {
   id: string;
-  role: string;
+  role?: string; // Role might be optional depending on where it's signed
+  iat?: number; // Issued at
+  exp?: number; // Expiration time
 }
 
-// This function will only ever be called on the server
-export async function verifyJwt(token: string): Promise<JwtPayload | null> {
-  const jwtModule = await jwtPromise; // Await the module loading
+/**
+ * Retrieves the JWT secret from runtimeConfig.
+ */
+function getJwtSecret(): string {
+  const config = useRuntimeConfig(); // useRuntimeConfig is available in server context
+  const jwtSecret = config.private.jwtSecret; // Access private secret
+
+  if (!jwtSecret) {
+    console.error('CRITICAL ERROR: JWT secret is NOT configured on the server. Check .env and nuxt.config.ts.');
+    throw new Error('JWT_SECRET is not configured on the server. Cannot proceed with JWT operations.');
+  }
+  return jwtSecret;
+}
+
+/**
+ * Verifies a JWT token. This function should only ever be called on the server.
+ * @param token The JWT string.
+ * @returns Decoded payload or null if verification fails.
+ */
+export async function verifyJwt(token: string): Promise<AppJwtPayload | null> {
+  const jwtModule = await jwtModulePromise; // Await the module loading
   
   if (!jwtModule) {
     console.warn('verifyJwt called in an environment where jsonwebtoken is not loaded (likely client, or failed server load).');
     return null;
   }
 
-  const config = useRuntimeConfig(); // useRuntimeConfig is available in server context
-  const jwtSecret = config.private.jwtSecret;
-
-  if (!jwtSecret) {
-    console.error('JWT secret is not configured on the server.');
-    return null;
-  }
+  const jwtSecret = getJwtSecret(); // Get the secret reliably
 
   try {
-    const decoded = jwtModule.verify(token, jwtSecret) as JwtPayload;
-    console.log("JWT Helper: Token verified successfully."); // Add log
+    // CRITICAL: Log the secret used for verification (first 10 chars)
+    console.log("JWT Helper: Using JWT Secret for VERIFICATION (first 10 chars):", jwtSecret.substring(0, 10) + '...');
+
+    const decoded = jwtModule.verify(token, jwtSecret) as AppJwtPayload;
+    console.log("JWT Helper: Token verified successfully. Decoded ID:", decoded.id); // Log success
     return decoded;
   } catch (error) {
-    console.error('JWT Verification failed:', (error as Error).message);
+    console.error('JWT Helper: Token verification failed:', (error as Error).message);
     return null;
   }
 }
 
-// This function will only ever be called on the server
-export async function signJwt(payload: object): Promise<string> {
-  const jwtModule = await jwtPromise; // Await the module loading
+/**
+ * Signs a JWT token with a given payload. This function should only ever be called on the server.
+ * @param payload The data to sign into the token.
+ * @returns The signed JWT string.
+ */
+export async function signJwt(payload: object, expiresIn: string = '7d'): Promise<string> {
+  const jwtModule = await jwtModulePromise; // Await the module loading
 
   if (!jwtModule) {
     console.warn('signJwt called in an environment where jsonwebtoken is not loaded (likely client, or failed server load).');
-    throw new Error('jsonwebtoken module not available.');
+    throw new Error('jsonwebtoken module not available for signing.');
   }
 
-  const config = useRuntimeConfig();
-  const jwtSecret = config.private.jwtSecret;
-
-  if (!jwtSecret) {
-    throw new Error('JWT_SECRET is not configured on the server.');
-  }
+  const jwtSecret = getJwtSecret(); // Get the secret reliably
 
   try {
-    const signedToken = jwtModule.sign(payload, jwtSecret, { expiresIn: '7d' });
-    console.log("JWT Helper: Token signed successfully."); // Add log
+    const signedToken = jwtModule.sign(payload, jwtSecret, { expiresIn });
+    console.log("JWT Helper: Token signed successfully (first 10 chars secret):", jwtSecret.substring(0, 10) + '...'); // Add log
     return signedToken;
   } catch (error) {
-    console.error('JWT Signing FAILED in Helper:', (error as Error).message);
+    console.error('JWT Helper: Token signing FAILED:', (error as Error).message);
     throw error;
   }
 }

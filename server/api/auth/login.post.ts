@@ -1,9 +1,10 @@
-// server/api/auth/login.post.ts
+// C:/Users/HomePC/taskforge-nuxt/server/api/auth/login.post.ts
 import { defineEventHandler, readBody, createError, setCookie } from "h3";
 import { z } from "zod";
 import bcrypt from "bcryptjs";
-import { UserModel } from "~/server/db/models/user";
-import { signJwt } from "~/server/utils/jwtHelper";
+import { UserModel, type IUserModel } from "~/server/db/models/user"; // Import IUserModel
+import { sendAuthToken, hashPassword, comparePassword } from "~/server/utils/auth"; // Import utilities
+
 
 const loginSchema = z.object({
   email: z.string().email("Invalid email address"),
@@ -17,6 +18,7 @@ export default defineEventHandler(async (event) => {
   try {
     const { email, password } = loginSchema.parse(body);
 
+    // CRITICAL: Select +password to fetch the hashed password from DB
     const user = await UserModel.findOne({ email }).select("+password");
 
     if (!user || !user.password) {
@@ -28,7 +30,8 @@ export default defineEventHandler(async (event) => {
       });
     }
 
-    const isPasswordValid = await bcrypt.compare(password, user.password);
+    // CRITICAL: Use comparePassword from utils/auth.ts
+    const isPasswordValid = await comparePassword(password, user.password);
     if (!isPasswordValid) {
       console.warn("[API POST /auth/login] Login failed: Incorrect password for:", email);
       throw createError({
@@ -38,21 +41,12 @@ export default defineEventHandler(async (event) => {
       });
     }
 
-    const tokenPayload = { id: user._id.toString(), role: user.role };
-    const token = await signJwt(tokenPayload);
-
-    const isProduction = process.env.NODE_ENV === "production";
-    setCookie(event, "auth_token", token, {
-      httpOnly: true,
-      secure: isProduction,
-      sameSite: isProduction ? "strict" : "lax",
-      maxAge: 60 * 60 * 24 * 7,
-      path: "/",
-    });
+    // CRITICAL FIX: Call sendAuthToken with event, user ID, and user role
+    await sendAuthToken(event, user._id.toString(), user.role);
     console.log("[API POST /auth/login] Auth token cookie set successfully.");
 
     const userResponse = user.toJSON();
-    delete userResponse.password;
+    delete userResponse.password; // Ensure password is removed from response
 
     return {
       statusCode: 200,

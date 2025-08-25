@@ -1,124 +1,169 @@
-<!-- C:/Users/HomePC/taskforge-nuxt/components/MapBase.vue -->
+//components/MapBase.vue
 <template>
   <div :style="{ height: mapHeight, width: mapWidth }" class="map-wrapper rounded-xl overflow-hidden">
-    <!-- CRITICAL: <ClientOnly> is used to ensure Leaflet only renders in the browser -->
     <ClientOnly fallback-tag="div" fallback="Loading map...">
-      <!-- <LMap> is the main component from @nuxtjs/leaflet -->
-      <LMap ref="mapRef" :zoom="zoom" :center="center" @ready="onMapReady">
-        <!-- <LTileLayer> is used for the base map tiles -->
+      <LMap 
+        ref="mapRef" 
+        :zoom="zoom" 
+        :center="center" 
+        :use-global-leaflet="false"
+        @ready="onLMapInstanceReady"
+        style="height: 100%;"
+      >
         <LTileLayer
           url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
           attribution="&copy; <a href='https://www.openstreetmap.org/'>OpenStreetMap</a> contributors"
         />
-        <!-- Slot for custom layers, markers, popups, etc., from parent components -->
-        <slot :map="mapInstance" :leaflet-module="L_module_object" />
+        <!-- Render slot content only when map is ready -->
+        <slot v-if="isFullyReady" :map="mapInstance" :leaflet-module="L" />
       </LMap>
     </ClientOnly>
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, computed, watch, onMounted, onBeforeUnmount } from 'vue';
-import { useLeaflet as useNuxtLeaflet } from '#imports'; // Import the composable from @nuxtjs/leaflet
-import type { Map as LeafletMapInstance, LatLngExpression } from 'leaflet'; // Import types from 'leaflet' directly
+import { ref, computed, watch, onBeforeUnmount, nextTick } from 'vue';
+import type { Map as LeafletMapInstance, LatLngExpression } from 'leaflet';
 
 interface Props {
-  height?: string; // e.g., '400px', '100%'
-  width?: string;  // e.g., '100%', '800px'
+  height?: string;
+  width?: string;
   zoom?: number;
-  center?: LatLngExpression; // [latitude, longitude]
-  invalidateSizeTrigger?: any; // A prop that can be watched to trigger invalidateSize
+  center?: LatLngExpression;
+  invalidateSizeTrigger?: unknown;
 }
 
 const props = withDefaults(defineProps<Props>(), {
   height: '400px',
   width: '100%',
   zoom: 13,
-  center: () => [0.0, 38.0], // Default to central Kenya
+  center: () => [0.0, 38.0],
 });
 
 const emit = defineEmits<{
   (e: 'map-ready', map: LeafletMapInstance, L: typeof import('leaflet')): void;
 }>();
 
-const mapRef = ref(null); // Ref to the <LMap> component
-const mapInstance = ref<LeafletMapInstance | null>(null); // Actual Leaflet map object
-const L_module_object = ref<typeof import('leaflet') | null>(null); // Leaflet 'L' module object
+const mapRef = ref(null);
+const mapInstance = ref<LeafletMapInstance | null>(null);
+const L = ref<typeof import('leaflet') | null>(null);
+const isFullyReady = ref(false);
+const hasEmittedReady = ref(false);
 
 const mapHeight = computed(() => props.height);
 const mapWidth = computed(() => props.width);
 
-// Composable from @nuxtjs/leaflet
-// This composable ensures the Leaflet module (L) is available
-// It typically returns a promise that resolves with the L module or exposes it directly
-const { L: LeafletModule } = useNuxtLeaflet();
-
-// Handler when the LMap component is fully initialized by Leaflet.js
-const onMapReady = (map: LeafletMapInstance) => {
+async function onLMapInstanceReady(map: LeafletMapInstance) {
+  console.log('MapBase.vue: <LMap> ready event received');
   mapInstance.value = map;
-  L_module_object.value = LeafletModule; // Store the Leaflet module object
-
-  console.log('MapBase.vue: @nuxtjs/leaflet map ready!', {
-    mapInstance: !!mapInstance.value,
-    L_module_object: !!L_module_object.value,
-  });
-
-  // Emit the native Leaflet map instance and the L module object
-  emit('map-ready', map, LeafletModule);
-};
-
-// --- invalidateSize() Handling for Modals / Visibility Changes ---
-// This is crucial when a map is inside a hidden container that becomes visible.
-watch(() => props.invalidateSizeTrigger, () => {
-  if (mapInstance.value) {
-    // We use nextTick to ensure the map container has been rendered and gained its dimensions
-    // AFTER the trigger (e.g., modal opens, v-if becomes true).
+  
+  // Dynamically import Leaflet only on client-side to avoid SSR issues
+  if (process.client && !L.value) {
+    try {
+      const leafletModule = await import('leaflet');
+      L.value = leafletModule.default;
+      console.log('MapBase.vue: Leaflet module loaded dynamically');
+    } catch (error) {
+      console.error('MapBase.vue: Failed to load Leaflet:', error);
+      return;
+    }
+  }
+  
+  if (L.value && !hasEmittedReady.value) {
+    isFullyReady.value = true;
+    hasEmittedReady.value = true;
+    
+    console.log('MapBase.vue: Emitting map-ready (map + L ready)');
+    emit('map-ready', map, L.value);
+    
+    // Ensure proper sizing after emission
     nextTick(() => {
-      mapInstance.value?.invalidateSize({ pan: false });
-      console.log('MapBase.vue: invalidateSize() called due to trigger.');
+      map.invalidateSize({ pan: false });
+      console.log('MapBase.vue: invalidateSize called after map-ready emission');
     });
   }
-}, { deep: true, immediate: false }); // immediate: false as modal might not be visible initially
+}
 
-// Watch for external center/zoom changes from parent props
-watch(() => props.center, (newCenter) => {
-  if (mapInstance.value && newCenter) {
-    mapInstance.value.setView(newCenter, props.zoom);
+// InvalidateSize trigger watcher
+watch(
+  () => props.invalidateSizeTrigger,
+  () => {
+    if (mapInstance.value) {
+      nextTick(() => {
+        mapInstance.value?.invalidateSize({ pan: false });
+        console.log('MapBase.vue: invalidateSize due to trigger change');
+      });
+    }
   }
-}, { deep: true });
+);
 
-watch(() => props.zoom, (newZoom) => {
-  if (mapInstance.value && newZoom !== undefined) {
-    mapInstance.value.setZoom(newZoom);
+// Center change watcher
+watch(
+  () => props.center,
+  (newCenter) => {
+    if (mapInstance.value && newCenter) {
+      mapInstance.value.setView(newCenter, props.zoom);
+      console.log('MapBase.vue: Map center updated to:', newCenter);
+    }
+  },
+  { deep: true }
+);
+
+// Zoom change watcher
+watch(
+  () => props.zoom,
+  (newZoom) => {
+    if (mapInstance.value && newZoom !== undefined) {
+      mapInstance.value.setZoom(newZoom);
+      console.log('MapBase.vue: Map zoom updated to:', newZoom);
+    }
   }
-});
+);
 
-
-// Optional: Clean up on unmount (LMap component handles much of its own cleanup)
 onBeforeUnmount(() => {
-  if (mapInstance.value) {
-    console.log('MapBase.vue: Cleaning up map instance on unmount.');
-    // The @nuxtjs/leaflet components handle their own destroy,
-    // but manually ensure event listeners are off if directly added to mapInstance
-    // For now, rely on module's cleanup.
-  }
+  console.log('MapBase.vue: Component unmounting');
 });
 
-// Expose internal Leaflet L object and map instance for advanced parent usage (e.g., adding custom layers)
+// Expose methods and refs for parent components
 defineExpose({
-  mapInstance,
-  L_module_object,
+  mapInstance: readonly(mapInstance),
+  leafletModule: readonly(L),
+  isReady: readonly(isFullyReady),
+  triggerInvalidateSize() {
+    if (mapInstance.value) {
+      nextTick(() => {
+        mapInstance.value?.invalidateSize({ pan: false });
+        console.log('MapBase.vue: Exposed invalidateSize called');
+      });
+    } else {
+      console.warn('MapBase.vue: triggerInvalidateSize called before map ready');
+    }
+  },
 });
 </script>
 
 <style scoped>
-/* Ensure the wrapper div takes up space */
 .map-wrapper {
-  /* Using TailwindCSS classes directly on the div is also good,
-     but ensure it's not overriding necessary internal Leaflet styles. */
-  min-height: 100px; /* Fallback min height */
+  min-height: 100px;
+  height: 100%;
+  position: relative;
 }
 
-/* You might need to add specific styles if the module's base styles need tweaking.
-   However, the module usually handles this quite well. */
+/* Ensure map tiles load properly */
+.map-wrapper :deep(.leaflet-container) {
+  height: 100%;
+  width: 100%;
+}
+
+/* Loading fallback styling */
+.map-wrapper :deep(div[fallback]) {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  background-color: #374151;
+  color: #9CA3AF;
+  font-size: 0.875rem;
+  border-radius: 0.75rem;
+}
 </style>

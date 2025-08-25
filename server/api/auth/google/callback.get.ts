@@ -1,16 +1,19 @@
-// server/api/auth/google/callback.get.ts
+// C:/Users/HomePC/taskforge-nuxt/server/api/auth/google/callback.get.ts
 import {
   defineEventHandler,
   getQuery,
   createError,
-  setCookie,
+  // REMOVED: setCookie, // No longer needed here as sendAuthToken handles it
   sendRedirect,
   H3Event,
 } from "h3";
 import axios, { AxiosError } from "axios";
-import jwt from "jsonwebtoken";
+// REMOVED: import jwt from "jsonwebtoken"; // No longer needed here
 import { UserModel, type IUserModel } from "~/server/db/models/user";
 import { UserRole } from "~/types/user";
+// CRITICAL FIX: Import sendAuthToken from your new server/utils/auth.ts
+import { sendAuthToken } from "~/server/utils/auth";
+
 
 const AUTH_CONSTANTS = {
   google: {
@@ -28,13 +31,6 @@ const AUTH_CONSTANTS = {
   },
 };
 
-interface AppRuntimeConfig {
-  jwtSecret?: string;
-  googleClientId?: string;
-  googleClientSecret?: string;
-  googleRedirectUri?: string;
-}
-
 interface GoogleUser {
   sub: string;
   email: string;
@@ -43,31 +39,46 @@ interface GoogleUser {
   picture?: string;
 }
 
+interface ServerRuntimeConfig {
+  public: {
+    googleClientId?: string;
+    googleOauthRedirectUri?: string;
+  };
+  private: {
+    jwtSecret?: string;
+    googleClientSecret?: string;
+  };
+}
+
 function validateAuthEnv(
-  config: AppRuntimeConfig
-): asserts config is Required<AppRuntimeConfig> {
-  if (
-    !config.googleClientId ||
-    !config.googleClientSecret ||
-    !config.jwtSecret ||
-    !config.googleRedirectUri
-  ) {
+  config: ServerRuntimeConfig
+): asserts config is Required<ServerRuntimeConfig> {
+  const missingConfig: string[] = [];
+
+  if (!config.public.googleClientId) missingConfig.push("GOOGLE_CLIENT_ID (public)");
+  if (!config.public.googleOauthRedirectUri) missingConfig.push("GOOGLE_OAUTH_REDIRECT_URI (public)");
+
+  if (!config.private.googleClientSecret) missingConfig.push("GOOGLE_CLIENT_SECRET (private)");
+  if (!config.private.jwtSecret) missingConfig.push("JWT_SECRET (private)");
+
+  if (missingConfig.length > 0) {
+    console.error("Critical OAuth configuration missing. Check .env and nuxt.config.ts:", missingConfig.join(", "));
     throw new Error(
-      "Critical OAuth configuration missing. Check .env and nuxt.config.ts."
+      `Critical OAuth configuration missing: ${missingConfig.join(", ")}.`
     );
   }
 }
 
 async function exchangeAuthCode(
   code: string,
-  config: Required<AppRuntimeConfig>
+  config: Required<ServerRuntimeConfig>
 ) {
   try {
     const response = await axios.post(AUTH_CONSTANTS.google.tokenUrl, null, {
       params: {
-        client_id: config.googleClientId,
-        client_secret: config.googleClientSecret,
-        redirect_uri: config.googleRedirectUri,
+        client_id: config.public.googleClientId,
+        client_secret: config.private.googleClientSecret,
+        redirect_uri: config.public.googleOauthRedirectUri,
         code,
         grant_type: "authorization_code",
       },
@@ -125,7 +136,7 @@ async function findOrCreateUser(googleUser: GoogleUser) {
       profilePhoto: googleUser.picture,
       googleId: googleUser.sub,
       provider: "google",
-      role: UserRole.FieldOfficer,
+      role: UserRole.FieldOfficer, // Set default role
     });
     console.log(`Created new user from Google: ${user.email}`);
   } else if (!user.googleId) {
@@ -139,37 +150,17 @@ async function findOrCreateUser(googleUser: GoogleUser) {
   return user;
 }
 
-function setAuthCookie(event: H3Event, user: IUserModel, jwtSecret: string) {
-  const token = jwt.sign(
-    {
-      id: user.id,
-      role: user.role,
-    },
-    // FIX: The jwtSecret is already guaranteed to be a string here
-    jwtSecret,
-    { expiresIn: AUTH_CONSTANTS.jwt.expiresIn }
-  );
-
-  setCookie(event, AUTH_CONSTANTS.jwt.cookie.name, token, {
-    httpOnly: true,
-    secure: process.env.NODE_ENV === "production",
-    sameSite: AUTH_CONSTANTS.jwt.cookie.sameSite,
-    path: AUTH_CONSTANTS.jwt.cookie.path,
-    maxAge: AUTH_CONSTANTS.jwt.cookie.maxAge,
-  });
-  console.log("Auth cookie set successfully for user:", user.email);
-}
 
 export default defineEventHandler(async (event) => {
   try {
-    const config = useRuntimeConfig(event) as AppRuntimeConfig;
+    const config = useRuntimeConfig(event);
     const query = getQuery(event);
     const code = query.code as string | undefined;
     const error = query.error as string | undefined;
 
     if (error) {
       console.error("Google OAuth callback error:", error);
-      return sendRedirect(event, `/login?error=oauth_denied`);
+      return sendRedirect(event, `/login?error=oauth_denied`, 302);
     }
 
     if (!code) {
@@ -178,15 +169,20 @@ export default defineEventHandler(async (event) => {
         statusMessage: "Missing authorization code from Google.",
       });
     }
-    validateAuthEnv(config);
 
-    const { access_token } = await exchangeAuthCode(code, config);
+    validateAuthEnv(config as ServerRuntimeConfig);
+
+    const requiredConfig = config as Required<ServerRuntimeConfig>; // Assert the type after validation
+
+    const { access_token } = await exchangeAuthCode(code, requiredConfig);
     const googleUser = await fetchGoogleUser(access_token);
     const user = await findOrCreateUser(googleUser);
 
-    setAuthCookie(event, user, config.jwtSecret);
+    // CRITICAL FIX: Call sendAuthToken from server/utils/auth.ts
+    // Pass user ID and user role (from the model)
+    await sendAuthToken(event, user._id.toString(), user.role); // REMOVED jwtSecret parameter
 
-    return sendRedirect(event, "/dashboard");
+    return sendRedirect(event, "/dashboard", 302);
   } catch (error: any) {
     console.error("Full Google OAuth callback processing failed:", error);
     const errorMessage =
@@ -195,7 +191,8 @@ export default defineEventHandler(async (event) => {
       "Google authentication failed. Please try again.";
     return sendRedirect(
       event,
-      `/login?error=oauth_failed&message=${encodeURIComponent(errorMessage)}`
+      `/login?error=oauth_failed&message=${encodeURIComponent(errorMessage)}`,
+      302
     );
   }
 });
