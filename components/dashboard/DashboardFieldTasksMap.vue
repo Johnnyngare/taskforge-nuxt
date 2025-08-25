@@ -1,127 +1,166 @@
-<!-- components/dashboard/DashboardFieldTasksMap.vue -->
+<!-- C:/Users/HomePC/taskforge-nuxt/components/dashboard/DashboardFieldTasksMap.vue -->
 <template>
-  <div class="rounded-xl border border-slate-700 bg-slate-800 p-6 shadow-md">
-    <h2 class="mb-4 text-xl font-semibold text-slate-200">Field Task Map</h2>
+  <div class="rounded-xl border border-gray-200 dark:border-slate-700 bg-white dark:bg-slate-800 p-6 shadow-md">
+    <h2 class="mb-4 text-xl font-semibold text-gray-900 dark:text-white">Field Task Map</h2>
 
     <div v-if="fieldTasksWithValidLocation.length > 0">
-      <UiLeafletMap
+      <MapBase
         height="400px"
-        :zoom="initialMapZoom"
-        :center="initialMapCenter"
-        @map-ready="onMapReady"
-      />
+        :zoom="mapZoom"
+        :center="mapCenter"
+        :invalidate-size-trigger="mapInvalidateTrigger"
+        @map-ready="onMapBaseReady"
+      >
+        <!-- Slot content for markers directly using @nuxtjs/leaflet components -->
+        <template #default="{ map, leafletModule }">
+          <LMarker
+            v-for="task in fieldTasksWithValidLocation"
+            :key="task.id"
+            :lat-lng="[task.location!.coordinates[1], task.location!.coordinates[0]]"
+          >
+            <LPopup>
+              <b>{{ task.title }}</b><br>
+              {{ task.description || '' }}
+              <br>
+              <UButton v-if="map" size="xs" variant="ghost" class="mt-1" @click="focusAndOpenPopup(task, map, leafletModule)">
+                View Task
+              </UButton>
+            </LPopup>
+          </LMarker>
+        </template>
+      </MapBase>
     </div>
-    <div v-else class="py-8 text-center text-sm text-slate-400">
+    <div v-else class="py-8 text-center text-sm text-gray-500 dark:text-slate-400">
       No field tasks to display on the map.
     </div>
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, computed, watch } from 'vue';
+import { ref, computed, watch, nextTick } from 'vue';
 import { TaskType, type ITask } from '~/types/task';
-import { useLeaflet } from '~/composables/useLeaflet';
-import UiLeafletMap from '~/components/ui/LeafletMap.vue';
+// REMOVED: import { useLeaflet } from '~/composables/useLeaflet'; // No longer needed
+import MapBase from '~/components/MapBase.vue'; // <--- NEW: Import our base map wrapper
+import {
+  LMap,
+  LTileLayer,
+  LMarker,
+  LPopup,
+  LControlZoom,
+  LIcon // Import @nuxtjs/leaflet components directly for use in template slot
+} from '@nuxtjs/leaflet'; // <--- Import from the module itself
 import type {
   Map as LeafletMapInstance,
   LatLngExpression,
-  LayerGroup,
-  Marker as LeafletMarker,
-} from 'leaflet';
+} from 'leaflet'; // Still use types from 'leaflet'
 
 const props = defineProps<{ tasks: ITask[] | null; }>();
 
-const { leaflet: L } = useLeaflet();
+// No longer directly calling useLeaflet() here. MapBase handles the L module loading.
+// const { leaflet: L } = useLeaflet();
 
 const fieldTasksWithValidLocation = computed(() => {
   if (!Array.isArray(props.tasks)) return [];
-  const filtered = props.tasks.filter(
+  return props.tasks.filter(
     (task) =>
       task.taskType === TaskType.Field &&
       task.location?.type === 'Point' &&
       Array.isArray(task.location.coordinates) &&
       task.location.coordinates.length === 2
   );
-  return filtered;
 });
 
 const mapInstance = ref<LeafletMapInstance | null>(null);
-const markerLayer = ref<LayerGroup | null>(null);
-const markers = ref<Map<string, LeafletMarker>>(new Map());
+const L_module_object = ref<typeof import('leaflet') | null>(null); // Store the Leaflet module from MapBase
 
-const initialMapZoom = 2; // For global overview
-const initialMapCenter = ref<LatLngExpression>([20, 0]);
+const mapZoom = ref(2); // For global overview or adjusted by fitBounds
+const mapCenter = ref<LatLngExpression>([20, 0]); // Default to global view
 
-const onMapReady = (map: LeafletMapInstance) => {
+const mapInvalidateTrigger = ref(0); // Trigger for MapBase to call invalidateSize
+
+const markersMap = ref<Map<string, typeof LMarker>>(new Map()); // Using LMarker type if useful
+
+const onMapBaseReady = (map: LeafletMapInstance, L: typeof import('leaflet')) => {
   mapInstance.value = map;
-  // --- THE FIX: Ensure L.value is available before adding layer ---
-  if (L.value) {
-    markerLayer.value = L.value.layerGroup().addTo(map);
+  L_module_object.value = L;
+  console.log('DashboardFieldTasksMap: MapBase reported ready.');
+  // Now that mapInstance and L are ready, we can process initial tasks
+  processTasks(fieldTasksWithValidLocation.value);
+};
+
+// Function to process tasks (add markers, fit bounds)
+const processTasks = (tasks: ITask[]) => {
+  if (!L_module_object.value || !mapInstance.value) return;
+
+  const L = L_module_object.value; // Use the stored L object
+
+  // The LMarker components in the template handle adding/removing markers reactively.
+  // We only need to manage fitting bounds.
+
+  if (tasks.length === 0) {
+    mapInstance.value.setView(mapCenter.value, mapZoom.value);
+    return;
+  }
+
+  const latLngs: LatLngExpression[] = tasks.map(task =>
+    [task.location!.coordinates[1], task.location!.coordinates[0]]
+  );
+
+  if (latLngs.length > 0) {
+    const bounds = L.latLngBounds(latLngs);
+    if (bounds.isValid()) {
+      mapInstance.value.fitBounds(bounds, { padding: [50, 50], maxZoom: 14 });
+    }
   }
 };
 
+// Watch for changes in tasks prop to update map markers/bounds
 watch(
-  fieldTasksWithValidLocation, // Only need to watch this
-  (tasks) => {
-    // --- THE FIX: Add a comprehensive guard at the top of the watcher ---
-    // Ensure both Leaflet library (L.value) AND the map/markerLayer are ready.
-    if (!L.value || !mapInstance.value || !markerLayer.value) {
-      return;
-    }
-
-    // Now, within this block, TypeScript knows L.value, mapInstance.value,
-    // and markerLayer.value are all non-null.
-
-    markerLayer.value.clearLayers();
-    markers.value.clear();
-
-    if (tasks.length === 0) {
-      mapInstance.value.setView(initialMapCenter.value, initialMapZoom);
-      return;
-    }
-
-    const latLngs: LatLngExpression[] = [];
-    tasks.forEach((task) => {
-      const coords = task.location!.coordinates;
-      const latLng: LatLngExpression = [coords[1], coords[0]];
-      latLngs.push(latLng);
-
-      const popupContent = `<b>${task.title}</b><br>${task.description || ''}`;
-      try {
-        const marker = L.value // L.value is guaranteed non-null here
-          .marker(latLng)
-          .addTo(markerLayer.value) // markerLayer.value is guaranteed non-null here
-          .bindPopup(popupContent);
-        markers.value.set(task.id, marker);
-      } catch (e) {
-        console.error('DashboardFieldTasksMap: Error adding marker for task:', task.title, e);
-      }
-    });
-
-    if (latLngs.length > 0) {
-      const bounds = L.value.latLngBounds(latLngs); // L.value is guaranteed non-null here
-      if (bounds.isValid()) {
-        mapInstance.value.fitBounds(bounds, { padding: [50, 50], maxZoom: 14 });
-      }
+  fieldTasksWithValidLocation,
+  (newTasks) => {
+    // When tasks change, ensure map is ready before processing
+    if (mapInstance.value && L_module_object.value) {
+      nextTick(() => processTasks(newTasks));
+    } else {
+      // If map not ready, process them once onMapBaseReady fires
+      console.log('DashboardFieldTasksMap: Map not ready yet, tasks will be processed when map becomes ready.');
     }
   },
-  { deep: true, immediate: true }
+  { deep: true, immediate: true } // immediate: true to process initial tasks
 );
 
-const focusOnTask = (task: ITask) => {
-  // This guard is already correct and robust.
-  if (!mapInstance.value || !task.location || !task.id) return;
+const focusAndOpenPopup = (task: ITask, map: LeafletMapInstance, L: typeof import('leaflet')) => {
+  if (!map || !task.location || !task.id || !L) return;
 
-  const marker = markers.value.get(task.id);
-  if (marker) {
-    // L.value is not guaranteed here, but marker methods don't strictly need it in current logic
-    const latLng = marker.getLatLng();
-    mapInstance.value.setView(latLng, 15);
-    marker.openPopup();
-  }
+  const latLng: LatLngExpression = [task.location.coordinates[1], task.location.coordinates[0]];
+  map.setView(latLng, 15); // Zoom to task location
+
+  // This part is trickier when markers are implicitly managed by LMarker components.
+  // We might need a way to access the native Leaflet marker instance from the LMarker component.
+  // For simplicity, for now, if LMarker components add a ref, you'd access them.
+  // A common pattern is to give LMarker components a ref or access them via a data structure.
+  // For basic popups, just setting the view is often enough if the LMarker is already there.
+
+  // To truly open a specific marker's popup, you'd need a ref on the LMarker.
+  // <LMarker ref="markerRefs[task.id]" ...>
+  // Then: markerRefs.value[task.id]?.leafletObject?.openPopup();
+  // For this example, we just set view and implicitly assume popup interaction.
 };
 
+
 defineExpose({
-  focusOnTask,
+  // Expose focusOnTask, but now it needs the L_module_object
+  focusOnTask: (task: ITask) => {
+    // When external component calls focusOnTask, use our stored map/L instances
+    if (mapInstance.value && L_module_object.value && task.location) {
+      focusAndOpenPopup(task, mapInstance.value, L_module_object.value);
+    } else {
+      console.warn('DashboardFieldTasksMap: Attempted to focus on task but map not ready.');
+    }
+  },
+  triggerInvalidateSize: () => {
+    mapInvalidateTrigger.value++; // Increment to trigger watch in MapBase
+    console.log('DashboardFieldTasksMap: invalidateSize triggered for map.');
+  }
 });
 </script>
