@@ -3,15 +3,12 @@ import {
   defineEventHandler,
   getQuery,
   createError,
-  // REMOVED: setCookie, // No longer needed here as sendAuthToken handles it
   sendRedirect,
   H3Event,
 } from "h3";
 import axios, { AxiosError } from "axios";
-// REMOVED: import jwt from "jsonwebtoken"; // No longer needed here
 import { UserModel, type IUserModel } from "~/server/db/models/user";
 import { UserRole } from "~/types/user";
-// CRITICAL FIX: Import sendAuthToken from your new server/utils/auth.ts
 import { sendAuthToken } from "~/server/utils/auth";
 
 
@@ -39,14 +36,20 @@ interface GoogleUser {
   picture?: string;
 }
 
+// Updated interface to reflect comprehensive runtime config
 interface ServerRuntimeConfig {
   public: {
     googleClientId?: string;
     googleOauthRedirectUri?: string;
+    baseUrlPublic?: string; // Added for completeness based on nuxt.config.ts
+    uploadsBaseUrl?: string; // Added for completeness based on nuxt.config.ts
+    authUrl?: string; // Added for completeness based on our env discussions
   };
   private: {
     jwtSecret?: string;
     googleClientSecret?: string;
+    mongodbUri?: string; // Added for completeness based on nuxt.config.ts
+    authSecret?: string; // Added for completeness based on our env discussions
   };
 }
 
@@ -60,6 +63,9 @@ function validateAuthEnv(
 
   if (!config.private.googleClientSecret) missingConfig.push("GOOGLE_CLIENT_SECRET (private)");
   if (!config.private.jwtSecret) missingConfig.push("JWT_SECRET (private)");
+  // Add AUTH_SECRET validation here if your jwtHelper or sendAuthToken directly relies on it *instead* of JWT_SECRET
+  // if (!config.private.authSecret) missingConfig.push("AUTH_SECRET (private)");
+
 
   if (missingConfig.length > 0) {
     console.error("Critical OAuth configuration missing. Check .env and nuxt.config.ts:", missingConfig.join(", "));
@@ -152,11 +158,40 @@ async function findOrCreateUser(googleUser: GoogleUser) {
 
 
 export default defineEventHandler(async (event) => {
+  // --- START DIAGNOSTIC LOGGING ---
+  console.log("--- Google OAuth Callback Handler STARTED ---");
+  const url = getRequestURL(event);
+  console.log(`Request URL: ${url.href}`);
+  console.log(`Request Path: ${url.pathname}`);
+  console.log(`Request Query: ${url.search}`);
+  // --- END DIAGNOSTIC LOGGING ---
+
   try {
     const config = useRuntimeConfig(event);
+
+    // --- DIAGNOSTIC LOGGING OF RUNTIME CONFIG ---
+    console.log("Runtime Config (Public) for Callback:", {
+      googleClientId: config.public.googleClientId ? "PRESENT" : "MISSING",
+      googleOauthRedirectUri: config.public.googleOauthRedirectUri,
+      baseUrlPublic: config.public.baseUrlPublic,
+      uploadsBaseUrl: config.public.uploadsBaseUrl,
+      authUrl: config.public.authUrl,
+    });
+    console.log("Runtime Config (Private) for Callback:", {
+      googleClientSecret: config.private.googleClientSecret ? "PRESENT" : "MISSING",
+      jwtSecret: config.private.jwtSecret ? "PRESENT" : "MISSING",
+      mongodbUri: config.private.mongodbUri ? "PRESENT" : "MISSING",
+      authSecret: config.private.authSecret ? "PRESENT" : "MISSING",
+    });
+    // --- END DIAGNOSTIC LOGGING OF RUNTIME CONFIG ---
+
+
     const query = getQuery(event);
     const code = query.code as string | undefined;
     const error = query.error as string | undefined;
+
+    console.log(`Query Params - code: ${code ? 'PRESENT' : 'MISSING'}, error: ${error || 'NONE'}`);
+
 
     if (error) {
       console.error("Google OAuth callback error:", error);
@@ -164,35 +199,46 @@ export default defineEventHandler(async (event) => {
     }
 
     if (!code) {
+      console.error("Missing authorization code from Google in callback.");
       throw createError({
         statusCode: 400,
         statusMessage: "Missing authorization code from Google.",
       });
     }
 
-    validateAuthEnv(config as ServerRuntimeConfig);
+    validateAuthEnv(config as ServerRuntimeConfig); // This will throw if critical envs are missing
+    console.log("All critical Auth environment variables validated successfully.");
+
 
     const requiredConfig = config as Required<ServerRuntimeConfig>; // Assert the type after validation
 
     const { access_token } = await exchangeAuthCode(code, requiredConfig);
+    console.log(`Successfully exchanged code for access token. Access token (truncated): ${access_token ? access_token.substring(0, 10) + '...' : 'N/A'}`);
+    
     const googleUser = await fetchGoogleUser(access_token);
-    const user = await findOrCreateUser(googleUser);
+    console.log(`Successfully fetched Google user info for email: ${googleUser.email}`);
 
-    // CRITICAL FIX: Call sendAuthToken from server/utils/auth.ts
-    // Pass user ID and user role (from the model)
-    await sendAuthToken(event, user._id.toString(), user.role); // REMOVED jwtSecret parameter
+    const user = await findOrCreateUser(googleUser);
+    console.log(`User found or created: ID ${user._id}, Email: ${user.email}`);
+
+
+    await sendAuthToken(event, user._id.toString(), user.role); 
+    console.log("Auth cookie operation completed. Redirecting to dashboard.");
 
     return sendRedirect(event, "/dashboard", 302);
   } catch (error: any) {
-    console.error("Full Google OAuth callback processing failed:", error);
+    console.error("--- FULL Google OAuth callback processing FAILED ---", error);
     const errorMessage =
       error.data?.message ||
       error.statusMessage ||
       "Google authentication failed. Please try again.";
+    console.error(`Redirecting to /login with error: ${errorMessage}`);
     return sendRedirect(
       event,
       `/login?error=oauth_failed&message=${encodeURIComponent(errorMessage)}`,
       302
     );
+  } finally {
+    console.log("--- Google OAuth Callback Handler FINISHED ---");
   }
 });

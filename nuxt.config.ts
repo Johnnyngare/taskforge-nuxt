@@ -25,7 +25,7 @@ export default defineNuxtConfig({
       googleClientId: process.env.GOOGLE_CLIENT_ID,
       googleOauthRedirectUri:
         process.env.GOOGLE_OAUTH_REDIRECT_URI ||
-        "http://localhost:3000/api/auth/google/callback",
+        "http://localhost:3000/api/oauth/google/callback",
       baseUrlPublic: process.env.BASE_URL_PUBLIC || "http://localhost:3000",
       uploadsBaseUrl: process.env.UPLOADS_BASE_URL || "http://localhost:3000/uploads",
     },
