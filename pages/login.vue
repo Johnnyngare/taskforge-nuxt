@@ -232,7 +232,7 @@ const handleLogin = async () => {
 const handleGoogleLogin = async () => {
   googleLoading.value = true;
   try {
-    await navigateTo("/api/auth/google", { external: true });
+    await navigateTo("/api/oauth/google", { external: true });
   } catch (error: any) {
     toast.error(
       error?.message || "Could not redirect to Google. Please try again."
