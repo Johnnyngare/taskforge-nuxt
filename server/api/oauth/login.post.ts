@@ -1,4 +1,4 @@
-// C:/Users/HomePC/taskforge-nuxt/server/api/auth/login.post.ts
+// C:/Users/HomePC/taskforge-nuxt/server/api/oauth/login.post.ts
 import { defineEventHandler, readBody, createError, setCookie } from "h3";
 import { z } from "zod";
 import bcrypt from "bcryptjs";

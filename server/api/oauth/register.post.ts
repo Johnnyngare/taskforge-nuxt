@@ -1,4 +1,4 @@
-// server/api/auth/register.post.ts
+// server/api/oauth/register.post.ts
 import { defineEventHandler, readBody, createError, setCookie } from "h3";
 import { z } from "zod";
 import bcrypt from "bcryptjs";

@@ -72,7 +72,7 @@ export const useAuth = () => {
       console.log('useAuth: Attempting user registration for:', userData.email);
       // The register API route will handle user creation and potentially login/redirect.
       // We don't expect a direct user object back from this endpoint for security.
-      await $fetch('/api/auth/register', {
+      await $fetch('/api/oauth/register', {
         method: 'POST',
         body: userData,
       });
@@ -99,7 +99,7 @@ export const useAuth = () => {
     loading.value = true;
     try {
       console.log('useAuth: Attempting user login for:', credentials.email);
-      const response = await $fetch<{ user: IUser }>('/api/auth/login', {
+      const response = await $fetch<{ user: IUser }>('/api/oauth/login', {
         method: 'POST',
         body: credentials,
       });

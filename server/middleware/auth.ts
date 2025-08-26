@@ -29,8 +29,8 @@ export default defineEventHandler(async (event) => {
       url.startsWith('/__nuxt_error') ||
       url.startsWith('/_nuxt/') ||
       url === '/favicon.ico' ||
-      url.startsWith('/api/auth/login') ||
-      url.startsWith('/api/auth/register') ||
+      url.startsWith('/api/oauth/login') ||
+      url.startsWith('/api/oauth/register') ||
       url.startsWith('/api/oauth/google')
   )) {
     return;
