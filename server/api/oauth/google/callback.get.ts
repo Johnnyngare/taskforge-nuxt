@@ -1,4 +1,4 @@
-// C:/Users/HomePC/taskforge-nuxt/server/api/auth/google/callback.get.ts
+// C:/Users/HomePC/taskforge-nuxt/server/api/oauth/google/callback.get.ts
 import {
   defineEventHandler,
   getQuery,

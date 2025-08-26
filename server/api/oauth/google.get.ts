@@ -1,4 +1,4 @@
-// C:/Users/HomePC/taskforge-nuxt/server/api/auth/google.get.ts
+// C:/Users/HomePC/taskforge-nuxt/server/api/oauth/google.get.ts
 import { defineEventHandler, sendRedirect, createError } from "h3";
 import { URLSearchParams } from 'url'; // Ensure this import is present
 
@@ -58,7 +58,7 @@ export default defineEventHandler(async (event) => {
     await sendRedirect(event, `${authorizeUrl}?${queryParams.toString()}`);
 
   } catch (error) {
-    console.error("Server Error in /api/auth/google.get.ts:", error);
+    console.error("Server Error in /api/oauth/google.get.ts:", error);
 
     // Provide a generic error message to the client, log details internally
     throw createError({

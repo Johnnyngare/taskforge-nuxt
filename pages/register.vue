@@ -613,7 +613,7 @@ const handleGoogleRegister = async () => {
     });
 
     await new Promise((resolve) => setTimeout(resolve, 500));
-    await navigateTo("/api/auth/google", { external: true });
+    await navigateTo("/api/oauth/google", { external: true });
   } catch (error) {
     console.error("Google registration error:", error);
 

@@ -31,7 +31,7 @@ export default defineEventHandler(async (event) => {
       url === '/favicon.ico' ||
       url.startsWith('/api/auth/login') ||
       url.startsWith('/api/auth/register') ||
-      url.startsWith('/api/auth/google')
+      url.startsWith('/api/oauth/google')
   )) {
     return;
   }
