@@ -97,8 +97,7 @@
 import { ref, type Ref, computed } from "vue";
 import { useTasks } from "~/composables/useTasks";
 import { TaskStatus, TaskType, type ITask } from "~/types/task";
-import { useToast } from 'vue-toastification';
-
+import VueToastification from 'vue-toastification';
 import DashboardQuickAddTask from '~/components/dashboard/QuickAddTask.vue';
 import TaskEditModal from '~/components/TaskEditModal.vue';
 import TaskList from "~/components/TaskList.vue"; // Explicitly imported
@@ -111,7 +110,8 @@ useSeoMeta({
   title: "All Tasks - TaskForge",
 });
 
-const toast = useToast();
+
+	const { useToast } = VueToastification;
 const { tasks, pending, error, refresh, updateTask, deleteTask } = useTasks();
 
 const showCreateModal = ref(false);
