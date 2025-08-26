@@ -6,8 +6,8 @@ export default defineEventHandler(async (event) => {
   try {
     const config = useRuntimeConfig(event);
     // CRITICAL FIX: Access public runtimeConfig variables using their camelCase names
-    const GOOGLE_CLIENT_ID = config.public.googleClientId; // CORRECTED ACCESS
-    const GOOGLE_OAUTH_REDIRECT_URI = config.public.googleOauthRedirectUri; // CORRECTED ACCESS
+    const GOOGLE_CLIENT_ID = config.public.googleClientId; // corrected access
+    const GOOGLE_OAUTH_REDIRECT_URI = config.public.googleOauthRedirectUri; // corrected access
 
     // --- Validation ---
     if (!GOOGLE_CLIENT_ID) {
