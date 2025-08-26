@@ -1,5 +1,3 @@
-// C:/Users/HomePC/taskforge-nuxt/nuxt.config.ts
-
 import { defineNuxtConfig } from "nuxt/config";
 
 export default defineNuxtConfig({
@@ -20,16 +18,24 @@ export default defineNuxtConfig({
       mongodbUri: process.env.MONGODB_URI,
       jwtSecret: process.env.JWT_SECRET,
       googleClientSecret: process.env.GOOGLE_CLIENT_SECRET,
+      authSecret: process.env.AUTH_SECRET, // FIXED: Added missing authSecret
     },
     public: {
       googleClientId: process.env.GOOGLE_CLIENT_ID,
-      googleOauthRedirectUri:
-        process.env.GOOGLE_OAUTH_REDIRECT_URI ||
-        "http://localhost:3000/api/oauth/google/callback",
-      baseUrlPublic: process.env.BASE_URL_PUBLIC || "http://localhost:3000",
-      uploadsBaseUrl: process.env.UPLOADS_BASE_URL || "http://localhost:3000/uploads",
+      // FIXED: Proper environment-aware fallback logic
+      googleOauthRedirectUri: process.env.GOOGLE_OAUTH_REDIRECT_URI || 
+        (process.dev 
+          ? "http://localhost:3000/api/oauth/google/callback"
+          : "https://taskforge-nuxt.vercel.app/api/oauth/google/callback"),
+        
+      baseUrlPublic: process.env.BASE_URL_PUBLIC || 
+        (process.dev ? "http://localhost:3000" : "https://taskforge-nuxt.vercel.app"),
+        
+      uploadsBaseUrl: process.env.UPLOADS_BASE_URL || 
+        (process.dev ? "http://localhost:3000/uploads" : "https://taskforge-nuxt.vercel.app/uploads"),
     },
   },
+
   nitro: {
     publicAssets: [
       {
@@ -39,6 +45,7 @@ export default defineNuxtConfig({
       }
     ]
   },
+
   ui: {
     global: true,
     icons: ["heroicons", "simple-icons"],
@@ -53,11 +60,8 @@ export default defineNuxtConfig({
     storageKey: "taskforge-color-mode",
   },
 
-  // CSS: The @nuxtjs/leaflet module handles `leaflet.css` automatically.
-  // REMOVE any custom `leaflet/dist/leaflet.css` entries.
   css: [
     "~/assets/css/main.css",
-    // REMOVED: "leaflet/dist/leaflet.css", // Module handles this
   ],
 
   postcss: {
@@ -87,19 +91,7 @@ export default defineNuxtConfig({
           rel: "stylesheet",
           href: "https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap",
         },
-        // REMOVED: Any direct <link> tags for leaflet.css (e.g., CDN link)
-        // REMOVED: Any inline <style> tags for leaflet CSS (our diagnostic fix)
       ],
-      style: [], // Ensure this is empty or only contains non-Leaflet inline styles
     },
   },
-
-  plugins: [],
-
-  // --- NEW: Leaflet module specific configuration (optional, check module docs for options) ---
-  // leaflet: {
-  //   // No explicit configuration might be needed for basic usage,
-  //   // but this is where you'd put global Leaflet options if needed.
-  //   // e.g., default options for L.Map.
-  // }
 });

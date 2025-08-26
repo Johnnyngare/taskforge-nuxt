@@ -1,4 +1,4 @@
-// server/api/auth/me.get.ts
+// server/api/oauth/me.get.ts
 import { defineEventHandler, createError } from "h3";
 import { UserModel } from "~/server/db/models/user";
 

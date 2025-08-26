@@ -49,7 +49,7 @@ export const useAuth = () => {
     try {
       // useFetch is the idiomatic way to fetch data in Nuxt 3.
       // It automatically handles SSR data transfer ("dehydration").
-      const { data } = await useFetch('/api/auth/me'); // This implicitly sends cookies via server context
+      const { data } = await useFetch('/api/oauth/me'); // This implicitly sends cookies via server context
       user.value = data.value?.user ?? null;
       console.log('useAuth: fetchUser completed. User:', user.value ? user.value.email : 'null');
     } catch (error) {
