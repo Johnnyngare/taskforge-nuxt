@@ -12,7 +12,7 @@ export default defineNuxtConfig({
     "@pinia/nuxt",
     "@vueuse/motion/nuxt",
     "@vueuse/nuxt",
-    "@nuxtjs/leaflet", // <--- ADDED: The official Leaflet module
+    "@nuxtjs/leaflet", 
   ],
 
   runtimeConfig: {

@@ -1,0 +1,8 @@
+# .vercelignore
+.env
+.git
+.nuxt
+.output
+node_modules
+*.log
+temp/
