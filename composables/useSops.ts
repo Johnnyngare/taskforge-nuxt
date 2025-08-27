@@ -3,12 +3,11 @@ import { useAsyncData } from '#app';
 import type { ISop, ISopAttachment } from '~/types/sop';
 import { useAuth } from '~/composables/useAuth';
 import { useApi } from '~/composables/useApi';
-import VueToastification from 'vue-toastification';
-
+import { useAppToast } from '~/composables/useAppToast';
 export function useSops() {
   const { user } = useAuth();
   const api = useApi();
-  const toast = VueToastification;
+  const toast = useAppToast();
 
   const {
     data: sops,
