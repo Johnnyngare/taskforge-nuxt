@@ -162,9 +162,11 @@
 import { z } from "zod";
 import { reactive, ref } from "vue";
 import { useAuth } from "~/composables/useAuth";
-import { useToast } from "vue-toastification"; // Assuming you use this for notifications
+// OLD: import { useToast } from "vue-toastification"; // Assuming you use this for notifications
+// NEW: CRITICAL FIX - Use your custom useAppToast composable
+import { useAppToast } from "~/composables/useAppToast"; 
 
-const toast = useToast();
+const toast = useAppToast(); // <--- CORRECTLY CALL THE COMPOSABLE
 
 useSeoMeta({
   title: "Sign In - TaskForge",
@@ -173,11 +175,9 @@ useSeoMeta({
 });
 
 definePageMeta({
-  // CORRECTED: No middleware needed here. The global middleware handles it.
   layout: "auth",
 });
 
-// CORRECTED: Get the `login` function and the reactive `loading` state from useAuth
 const { login, loading } = useAuth();
 
 const googleLoading = ref(false);
@@ -201,7 +201,6 @@ const formState = reactive({
 });
 
 const handleLogin = async () => {
-  // Zod validation is good, no changes needed here.
   try {
     loginSchema.parse(formState);
   } catch (validationError: any) {
@@ -214,18 +213,12 @@ const handleLogin = async () => {
     return;
   }
 
-  // CORRECTED: The `loading` state is now managed by the `useAuth` composable.
-  // We don't need to set it manually here.
   try {
-    // Call the login function from the composable.
-    // It will handle the API call, state updates, notifications, and redirection.
     await login({
       email: formState.email,
       password: formState.password,
     });
   } catch (error: any) {
-    // The `login` function in `useAuth` already shows a toast on failure.
-    // We can log the error here for debugging if needed, but no further action is required.
     console.error("Login failed on page:", error);
   }
 };
