@@ -2,9 +2,8 @@
 import { defineEventHandler, getRouterParam, createError } from '#imports';
 import mongoose from 'mongoose';
 import { SopModel } from '~/server/db/models/sop';
-import { deleteFile } from '~/server/utils/storage';
+import { del } from '@vercel/blob';
 import type { H3Event } from 'h3';
-import path from 'node:path';
 import { UserRole } from '~/types/user';
 
 export default defineEventHandler(async (event: H3Event) => {
@@ -12,26 +11,44 @@ export default defineEventHandler(async (event: H3Event) => {
   const attachmentId = getRouterParam(event, 'attachmentId');
   const user = event.context.user;
 
-  if (!user) { throw createError({ statusCode: 401, message: 'Unauthorized' }); }
-  if (!sopId || !mongoose.Types.ObjectId.isValid(sopId)) { throw createError({ statusCode: 400, message: 'Invalid SOP ID' }); }
-  if (!attachmentId) { throw createError({ statusCode: 400, message: 'Attachment ID is required' }); }
+  if (!user) { 
+    throw createError({ statusCode: 401, message: 'Unauthorized' }); 
+  }
+  if (!sopId || !mongoose.Types.ObjectId.isValid(sopId)) { 
+    throw createError({ statusCode: 400, message: 'Invalid SOP ID' }); 
+  }
+  if (!attachmentId) { 
+    throw createError({ statusCode: 400, message: 'Attachment ID is required' }); 
+  }
 
-  const sop = await SopModel.findById(sopId).lean(); // Use lean for performance
-  if (!sop) { throw createError({ statusCode: 404, message: 'SOP not found' }); }
+  const sop = await SopModel.findById(sopId).lean();
+  if (!sop) { 
+    throw createError({ statusCode: 404, message: 'SOP not found' }); 
+  }
 
   const attachment = sop.attachments.find(att => att.id === attachmentId);
-  if (!attachment) { throw createError({ statusCode: 404, message: 'Attachment not found on SOP.' }); }
+  if (!attachment) { 
+    throw createError({ statusCode: 404, message: 'Attachment not found on SOP.' }); 
+  }
 
   // --- RBAC for Attachment Deletion ---
   // Only Admin, Manager, Dispatcher, OR the SOP's author can delete an attachment.
-  if (![UserRole.Admin, UserRole.Manager, UserRole.Dispatcher].includes(user.role as UserRole) && String(sop.authorId) !== String(user.id)) {
-     throw createError({ statusCode: 403, message: 'Forbidden: You do not have permission to delete this attachment.' });
+  if (![UserRole.Admin, UserRole.Manager, UserRole.Dispatcher].includes(user.role as UserRole) && 
+      String(sop.authorId) !== String(user.id)) {
+     throw createError({ 
+       statusCode: 403, 
+       message: 'Forbidden: You do not have permission to delete this attachment.' 
+     });
   }
 
   try {
-    // 1. Delete file from disk
-    const filePath = path.join(process.cwd(), process.env.UPLOADS_DIR || 'uploads', SOP_ATTACHMENTS_SUBDIR, sopId, attachment.storedName);
-    await deleteFile(filePath);
+    // 1. Delete file from Vercel Blob
+    if (attachment.blobUrl) {
+      await del(attachment.blobUrl, {
+        token: process.env.BLOB_READ_WRITE_TOKEN,
+      });
+      console.log(`[API DELETE Attachment] Deleted file from Vercel Blob: ${attachment.blobUrl}`);
+    }
 
     // 2. Remove attachment metadata from SOP document in DB
     const updatedSop = await SopModel.findByIdAndUpdate(
@@ -40,7 +57,9 @@ export default defineEventHandler(async (event: H3Event) => {
       { new: true } // Return updated document
     ).lean();
 
-    if (!updatedSop) { throw createError({ statusCode: 404, message: 'SOP not found after attachment removal.' }); }
+    if (!updatedSop) { 
+      throw createError({ statusCode: 404, message: 'SOP not found after attachment removal.' }); 
+    }
 
     event.node.res.statusCode = 204; // No Content for successful deletion
     return;

@@ -1,3 +1,4 @@
+// nuxt.config.ts
 import { defineNuxtConfig } from "nuxt/config";
 
 export default defineNuxtConfig({
@@ -18,11 +19,13 @@ export default defineNuxtConfig({
       mongodbUri: process.env.MONGODB_URI,
       jwtSecret: process.env.JWT_SECRET,
       googleClientSecret: process.env.GOOGLE_CLIENT_SECRET,
-      authSecret: process.env.AUTH_SECRET, // FIXED: Added missing authSecret
+      authSecret: process.env.AUTH_SECRET,
+      // Vercel Blob token - keep this private!
+      blobReadWriteToken: process.env.BLOB_READ_WRITE_TOKEN,
     },
     public: {
       googleClientId: process.env.GOOGLE_CLIENT_ID,
-      // FIXED: Proper environment-aware fallback logic
+      // Environment-aware fallback logic
       googleOauthRedirectUri: process.env.GOOGLE_OAUTH_REDIRECT_URI || 
         (process.dev 
           ? "http://localhost:3000/api/oauth/google/callback"
@@ -30,21 +33,19 @@ export default defineNuxtConfig({
         
       baseUrlPublic: process.env.BASE_URL_PUBLIC || 
         (process.dev ? "http://localhost:3000" : "https://taskforge-nuxt.vercel.app"),
-        
-      uploadsBaseUrl: process.env.UPLOADS_BASE_URL || 
-        (process.dev ? "http://localhost:3000/uploads" : "https://taskforge-nuxt.vercel.app/uploads"),
     },
   },
 
-  nitro: {
-    publicAssets: [
-      {
-        baseURL: '/uploads',
-        dir: './uploads',
-        maxAge: 60 * 60 * 24 * 365,
-      }
-    ]
-  },
+  // Remove the nitro.publicAssets configuration since we're using Vercel Blob
+  // nitro: {
+  //   publicAssets: [
+  //     {
+  //       baseURL: '/uploads',
+  //       dir: './uploads',
+  //       maxAge: 60 * 60 * 24 * 365,
+  //     }
+  //   ]
+  // },
 
   ui: {
     global: true,

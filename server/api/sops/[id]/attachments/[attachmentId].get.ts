@@ -1,55 +1,76 @@
 // server/api/sops/[id]/attachments/[attachmentId].get.ts
-import { defineEventHandler, getRouterParam, createError } from '#imports';
+import { defineEventHandler, getRouterParam, createError, sendRedirect } from '#imports';
 import mongoose from 'mongoose';
 import { SopModel } from '~/server/db/models/sop';
-import { getFilePath } from '~/server/utils/storage'; // NEW: Import utility to get file path
 import type { H3Event } from 'h3';
-import { promises as fs } from 'node:fs';
-import path from 'node:path';
-import { UserRole } from '~/types/user'; // For RBAC
+import { UserRole } from '~/types/user';
 
 export default defineEventHandler(async (event: H3Event) => {
   const sopId = getRouterParam(event, 'id');
   const attachmentId = getRouterParam(event, 'attachmentId');
   const user = event.context.user;
 
-  if (!user) { throw createError({ statusCode: 401, message: 'Unauthorized' }); }
-  if (!sopId || !mongoose.Types.ObjectId.isValid(sopId)) { throw createError({ statusCode: 400, message: 'Invalid SOP ID' }); }
-  if (!attachmentId) { throw createError({ statusCode: 400, message: 'Attachment ID is required' }); }
-
-  const sop = await SopModel.findById(sopId).lean();
-  if (!sop) { throw createError({ statusCode: 404, message: 'SOP not found' }); }
-
-  const attachment = sop.attachments.find(att => att.id === attachmentId);
-  if (!attachment) { throw createError({ statusCode: 404, message: 'Attachment not found' }); }
-
-  // --- RBAC for Download: Any authenticated user who can view the SOP can download its attachment ---
-  // If the SOPs are publicly viewable by any authenticated user, this might be simplified.
-  // Otherwise, you would check roles/ownership similar to other SOP operations.
-  // For now, let's assume if they are authenticated AND can view the SOP (which is typically all authenticated users for GET /sops)
-  // For stricter: Check if the user is owner, admin, manager, or dispatcher
-  if (![UserRole.Admin, UserRole.Manager, UserRole.Dispatcher].includes(user.role as UserRole) && String(sop.authorId) !== String(user.id)) {
-     throw createError({ statusCode: 403, message: 'Forbidden: You do not have permission to download this attachment.' });
+  if (!user) { 
+    throw createError({ statusCode: 401, message: 'Unauthorized' }); 
+  }
+  if (!sopId || !mongoose.Types.ObjectId.isValid(sopId)) { 
+    throw createError({ statusCode: 400, message: 'Invalid SOP ID' }); 
+  }
+  if (!attachmentId) { 
+    throw createError({ statusCode: 400, message: 'Attachment ID is required' }); 
   }
 
-  const filePath = path.join(process.cwd(), process.env.UPLOADS_DIR || 'uploads', SOP_ATTACHMENTS_SUBDIR, sopId, attachment.storedName); // Construct full path using storedName
-  
+  const sop = await SopModel.findById(sopId).lean();
+  if (!sop) { 
+    throw createError({ statusCode: 404, message: 'SOP not found' }); 
+  }
+
+  const attachment = sop.attachments.find(att => att.id === attachmentId);
+  if (!attachment) { 
+    throw createError({ statusCode: 404, message: 'Attachment not found' }); 
+  }
+
+  // --- RBAC for Download: Any authenticated user who can view the SOP can download its attachment ---
+  // For stricter access control, uncomment the lines below:
+  // if (![UserRole.Admin, UserRole.Manager, UserRole.Dispatcher].includes(user.role as UserRole) && 
+  //     String(sop.authorId) !== String(user.id)) {
+  //    throw createError({ statusCode: 403, message: 'Forbidden: You do not have permission to download this attachment.' });
+  // }
+
   try {
-    const fileStats = await fs.stat(filePath);
-    if (!fileStats.isFile()) { throw createError({ statusCode: 404, message: 'File not found on disk.' }); }
+    // For Vercel Blob, we can either:
+    // 1. Redirect to the blob URL (simpler, direct download from Vercel)
+    // 2. Proxy the file through our API (more control, but uses server resources)
+    
+    // Option 1: Direct redirect to Vercel Blob URL (recommended for better performance)
+    if (attachment.blobUrl) {
+      return sendRedirect(event, attachment.blobUrl, 302);
+    }
 
-    // Set appropriate headers for download
-    event.node.res.setHeader('Content-Type', attachment.mimeType);
-    event.node.res.setHeader('Content-Length', fileStats.size);
-    event.node.res.setHeader('Content-Disposition', `attachment; filename="${encodeURIComponent(attachment.originalName)}"`);
+    // Fallback if blobUrl is missing
+    throw createError({ statusCode: 404, message: 'File URL not found.' });
 
-    // Stream the file
-    const fileStream = await fs.readFile(filePath); // Or createReadStream for large files
-    return fileStream;
+    /* Option 2: Proxy through API (uncomment if you need server-side control over downloads)
+    if (attachment.blobUrl) {
+      const response = await fetch(attachment.blobUrl);
+      if (!response.ok) {
+        throw createError({ statusCode: 404, message: 'File not found in blob storage.' });
+      }
 
-  } catch (err: any) {
-    if (err.code === 'ENOENT') { throw createError({ statusCode: 404, message: 'File not found on disk.' }); }
-    console.error(`[API GET Attachment] Error serving file ${filePath}:`, err);
+      const fileBuffer = await response.arrayBuffer();
+      
+      // Set appropriate headers for download
+      event.node.res.setHeader('Content-Type', attachment.mimeType);
+      event.node.res.setHeader('Content-Length', attachment.size.toString());
+      event.node.res.setHeader('Content-Disposition', `attachment; filename="${encodeURIComponent(attachment.originalName)}"`);
+
+      return Buffer.from(fileBuffer);
+    }
+    */
+
+  } catch (error: any) {
+    if (error.statusCode) { throw error; }
+    console.error(`[API GET Attachment] Error serving attachment ${attachmentId}:`, error);
     throw createError({ statusCode: 500, message: 'Failed to serve attachment.' });
   }
 });

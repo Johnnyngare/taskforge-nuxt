@@ -1,21 +1,13 @@
 // server/api/sops/[id].put.ts
-import { defineEventHandler, createError, readBody } from '#imports';
+import { defineEventHandler, createError, getRouterParam } from '#imports';
 import { SopModel } from '~/server/db/models/sop';
 import { UserRole } from '~/types/user';
 import type { H3Event } from 'h3';
 import mongoose from 'mongoose';
 import { readMultipartFormData } from 'h3';
-import {
-  uploadFile,
-  deleteFile,
-  ensureUploadsDir,
-  renameFile,
-  SOP_ATTACHMENTS_SUBDIR,
-  UPLOADS_DIR
-} from '~/server/utils/storage';
+import { put, del } from '@vercel/blob';
 import { z } from 'zod';
 import { v4 as uuidv4 } from 'uuid';
-import path from 'node:path';
 
 // Zod Schemas for incoming text data (from multipart)
 const sopTextUpdateSchema = z.object({
@@ -42,11 +34,17 @@ export default defineEventHandler(async (event: H3Event) => {
   const sopId = getRouterParam(event, 'id');
   const user = event.context.user;
 
-  if (!user) { throw createError({ statusCode: 401, message: 'Unauthorized' }); }
-  if (!sopId || !mongoose.Types.ObjectId.isValid(sopId)) { throw createError({ statusCode: 400, message: 'Invalid SOP ID' }); }
+  if (!user) { 
+    throw createError({ statusCode: 401, message: 'Unauthorized' }); 
+  }
+  if (!sopId || !mongoose.Types.ObjectId.isValid(sopId)) { 
+    throw createError({ statusCode: 400, message: 'Invalid SOP ID' }); 
+  }
 
   const sopToUpdate = await SopModel.findById(sopId).lean();
-  if (!sopToUpdate) { throw createError({ statusCode: 404, message: 'SOP not found' }); }
+  if (!sopToUpdate) { 
+    throw createError({ statusCode: 404, message: 'SOP not found' }); 
+  }
 
   // RBAC for Update
   if (![UserRole.Admin, UserRole.Manager, UserRole.Dispatcher].includes(user.role as UserRole)) {
@@ -54,51 +52,88 @@ export default defineEventHandler(async (event: H3Event) => {
   }
 
   const formData = await readMultipartFormData(event);
-  if (!formData) { throw createError({ statusCode: 400, message: "No form data received." }); }
+  if (!formData) { 
+    throw createError({ statusCode: 400, message: "No form data received." }); 
+  }
 
   // 1. Parse Text Fields and `attachmentsToDelete` Array
   const dataField = formData.find(field => field.name === 'data');
   let parsedTextData: any = {};
   if (dataField && dataField.data) {
-    try { parsedTextData = JSON.parse(dataField.data.toString('utf8')); }
-    catch (parseError) { throw createError({ statusCode: 400, message: "Invalid SOP data format." }); }
+    try { 
+      parsedTextData = JSON.parse(dataField.data.toString('utf8')); 
+    } catch (parseError) { 
+      throw createError({ statusCode: 400, message: "Invalid SOP data format." }); 
+    }
   }
+  
   const validationResult = sopTextUpdateSchema.safeParse(parsedTextData);
-  if (!validationResult.success) { throw createError({ statusCode: 400, message: "Validation failed: " + validationResult.error.errors.map(e => e.message).join(', ') }); }
+  if (!validationResult.success) { 
+    throw createError({ 
+      statusCode: 400, 
+      message: "Validation failed: " + validationResult.error.errors.map(e => e.message).join(', ') 
+    }); 
+  }
   const { title, content, category, tags } = validationResult.data;
 
   const attachmentsToDeleteField = formData.find(field => field.name === 'attachmentsToDelete');
   let attachmentIdsToDelete: string[] = [];
   if (attachmentsToDeleteField && attachmentsToDeleteField.data) {
-    try { attachmentIdsToDelete = attachmentsToDeleteSchema.parse(JSON.parse(attachmentsToDeleteField.data.toString('utf8'))); }
-    catch (parseError) { throw createError({ statusCode: 400, message: "Invalid attachmentsToDelete format." }); }
+    try { 
+      attachmentIdsToDelete = attachmentsToDeleteSchema.parse(
+        JSON.parse(attachmentsToDeleteField.data.toString('utf8'))
+      ); 
+    } catch (parseError) { 
+      throw createError({ statusCode: 400, message: "Invalid attachmentsToDelete format." }); 
+    }
   }
 
   // 2. Process Existing Attachments: Filter out those marked for deletion
   let attachmentsToKeep = sopToUpdate.attachments?.filter(att => !attachmentIdsToDelete.includes(att.id)) || [];
 
-  // 3. Handle New File Uploads (to temp folder)
+  // 3. Handle New File Uploads
   const newAttachmentFiles = formData.filter(field => field.name === 'attachments' && field.data && field.filename);
   const newAttachmentsMetadata = [];
-  const tempFileAbsolutePaths: string[] = [];
+  const uploadedBlobUrls: string[] = [];
 
   const totalFilesAfterDeletionAndUpload = attachmentsToKeep.length + newAttachmentFiles.length;
   if (totalFilesAfterDeletionAndUpload > MAX_TOTAL_ATTACHMENTS_PER_SOP) {
-    throw createError({ statusCode: 400, message: `Max ${MAX_TOTAL_ATTACHMENTS_PER_SOP} attachments allowed. You are adding too many.` });
+    throw createError({ 
+      statusCode: 400, 
+      message: `Max ${MAX_TOTAL_ATTACHMENTS_PER_SOP} attachments allowed. You are adding too many.` 
+    });
   }
-
-  await ensureUploadsDir();
 
   const tempUploadFolderId = `temp_update_${uuidv4()}`;
 
   for (const file of newAttachmentFiles) {
-    if (!file.filename || !file.type || !file.data) { throw createError({ statusCode: 400, message: `Invalid file provided: ${file.filename || 'unknown'}.` }); }
-    if (file.data.length > MAX_SINGLE_FILE_SIZE_BYTES) { throw createError({ statusCode: 400, message: `File '${file.filename}' exceeds ${MAX_SINGLE_FILE_SIZE_BYTES / (1024 * 1024)}MB limit.` }); }
-    if (!ALLOWED_MIMES.includes(file.type)) { throw createError({ statusCode: 400, message: `File type '${file.type}' for '${file.filename}' is not allowed.` }); }
+    if (!file.filename || !file.type || !file.data) { 
+      throw createError({ statusCode: 400, message: `Invalid file provided: ${file.filename || 'unknown'}.` }); 
+    }
+    if (file.data.length > MAX_SINGLE_FILE_SIZE_BYTES) { 
+      throw createError({ 
+        statusCode: 400, 
+        message: `File '${file.filename}' exceeds ${MAX_SINGLE_FILE_SIZE_BYTES / (1024 * 1024)}MB limit.` 
+      }); 
+    }
+    if (!ALLOWED_MIMES.includes(file.type)) { 
+      throw createError({ 
+        statusCode: 400, 
+        message: `File type '${file.type}' for '${file.filename}' is not allowed.` 
+      }); 
+    }
 
     try {
-      const { storedName, filePath, publicUrl } = await uploadFile(file.data, file.filename, tempUploadFolderId);
-      tempFileAbsolutePaths.push(filePath);
+      const fileExtension = file.filename.split('.').pop() || '';
+      const storedName = `${uuidv4()}.${fileExtension}`;
+      const blobPath = `sops/${tempUploadFolderId}/${storedName}`;
+
+      const blob = await put(blobPath, file.data, {
+        access: 'public',
+        token: process.env.BLOB_READ_WRITE_TOKEN,
+      });
+
+      uploadedBlobUrls.push(blob.url);
 
       newAttachmentsMetadata.push({
         id: uuidv4(),
@@ -106,62 +141,83 @@ export default defineEventHandler(async (event: H3Event) => {
         storedName: storedName,
         mimeType: file.type,
         size: file.data.length,
-        path: filePath, // Store ABSOLUTE temporary path for now
-        url: publicUrl,
+        blobUrl: blob.url,
+        url: blob.url,
         uploadedAt: new Date().toISOString(),
         uploadedBy: { id: user.id, name: user.name || 'Unknown' },
       });
     } catch (uploadError) {
       console.error(`[API PUT /sops] Error uploading new file '${file.filename}':`, uploadError);
-      await Promise.all(tempFileAbsolutePaths.map(p => deleteFile(p).catch(e => console.error('Cleanup error:', e))));
+      // Cleanup uploaded blobs
+      await Promise.all(uploadedBlobUrls.map(url => 
+        del(url, { token: process.env.BLOB_READ_WRITE_TOKEN }).catch(e => console.error('Cleanup error:', e))
+      ));
       throw createError({ statusCode: 500, message: `Failed to upload new file '${file.filename}'.` });
     }
   }
 
-  // 4. Delete files from storage that were marked for deletion
+  // 4. Delete files from Vercel Blob that were marked for deletion
   const deletionPromises = attachmentIdsToDelete.map(async (attId) => {
-        const att = sopToUpdate.attachments.find(a => a.id === attId);
-        if (att) {
-            // Construct absolute path for deletion from the path stored in DB (which is RELATIVE for old files)
-            const filePathOnDisk = path.join(process.cwd(), UPLOADS_DIR, att.path);
-            await deleteFile(filePathOnDisk);
-        } else {
-            console.warn(`[API PUT /sops] Attempted to delete attachment with ID ${attId} not found on SOP ${sopId}.`);
-        }
-    });
+    const att = sopToUpdate.attachments.find(a => a.id === attId);
+    if (att && att.blobUrl) {
+      try {
+        await del(att.blobUrl, { token: process.env.BLOB_READ_WRITE_TOKEN });
+        console.log(`[API PUT /sops] Deleted attachment ${attId} from Vercel Blob`);
+      } catch (error) {
+        console.error(`[API PUT /sops] Failed to delete attachment ${attId} from Vercel Blob:`, error);
+      }
+    } else {
+      console.warn(`[API PUT /sops] Attempted to delete attachment with ID ${attId} not found on SOP ${sopId}.`);
+    }
+  });
 
   await Promise.all(deletionPromises);
 
-  // 5. Build Final Attachments Array and Move New Files to Permanent Location
-  const finalAttachments = [...attachmentsToKeep, ...newAttachmentsMetadata];
-  const updatedFinalAttachments = [];
+  // 5. Move New Files to Permanent Location
+  const updatedNewAttachments = [];
+  for (const att of newAttachmentsMetadata) {
+    const oldBlobUrl = att.blobUrl;
+    const newBlobPath = `sops/${sopId}/${att.storedName}`;
 
-  for (const att of finalAttachments) {
-      // Check if it's a newly uploaded temp file that needs to be moved to its permanent SOP folder
-      // att.path here is the absolute temp path from newAttachmentsMetadata
-      if (att.path.startsWith(path.join(process.cwd(), UPLOADS_DIR, SOP_ATTACHMENTS_SUBDIR, tempUploadFolderId))) {
-          const oldAbsoluteFilePath = att.path; // This is the absolute temp path
-          const newRelativePath = path.join(SOP_ATTACHMENTS_SUBDIR, sopId, att.storedName); // Relative for DB/URL
-          const newAbsoluteFilePath = path.join(process.cwd(), UPLOADS_DIR, newRelativePath);
-
-          try {
-              await renameFile(oldAbsoluteFilePath, newAbsoluteFilePath);
-              updatedFinalAttachments.push({ ...att, path: newRelativePath, url: `${process.env.UPLOADS_BASE_URL}/${newRelativePath}` }); // Update path to relative, URL to public
-          } catch (moveError: any) {
-              console.error(`[API PUT /sops] Failed to move new file '${att.originalName}' to permanent SOP folder ${sopId}:`, moveError);
-          }
-      } else {
-          updatedFinalAttachments.push(att); // Existing attachments (already in permanent folder, or failed to move) go directly
+    try {
+      // Get the file data from the temporary blob
+      const response = await fetch(oldBlobUrl);
+      if (!response.ok) {
+        throw new Error(`Failed to fetch temporary blob: ${response.statusText}`);
       }
+      const fileBuffer = Buffer.from(await response.arrayBuffer());
+
+      // Upload to permanent location
+      const permanentBlob = await put(newBlobPath, fileBuffer, {
+        access: 'public',
+        token: process.env.BLOB_READ_WRITE_TOKEN,
+      });
+
+      // Delete temporary blob
+      await del(oldBlobUrl, { token: process.env.BLOB_READ_WRITE_TOKEN });
+
+      updatedNewAttachments.push({
+        ...att,
+        blobUrl: permanentBlob.url,
+        url: permanentBlob.url,
+      });
+    } catch (moveError: any) {
+      console.error(`[API PUT /sops] Failed to move new file '${att.originalName}' to permanent location:`, moveError);
+      // Keep the temporary location if move fails
+      updatedNewAttachments.push(att);
+    }
   }
 
-  // 6. Update SOP Document in DB
+  // 6. Build Final Attachments Array
+  const finalAttachments = [...attachmentsToKeep, ...updatedNewAttachments];
+
+  // 7. Update SOP Document in DB
   const updatePayload: Record<string, any> = {
     ...(title !== undefined && { title }),
     ...(content !== undefined && { content }),
     ...(category !== undefined && { category }),
     ...(tags !== undefined && { tags }),
-    attachments: updatedFinalAttachments,
+    attachments: finalAttachments,
   };
 
   try {
@@ -171,13 +227,23 @@ export default defineEventHandler(async (event: H3Event) => {
       { new: true, runValidators: true }
     ).populate('authorId', 'name').lean();
 
-    if (!updatedSop) { throw createError({ statusCode: 404, message: 'SOP not found after update' }); }
+    if (!updatedSop) { 
+      throw createError({ statusCode: 404, message: 'SOP not found after update' }); 
+    }
 
     return new SopModel(updatedSop).toJSON();
   } catch (error: any) {
     if (error.statusCode) { throw error; }
-    if (error instanceof z.ZodError) { throw createError({ statusCode: 400, message: error.message, data: error.format() }); }
-    if (error.name === 'ValidationError') { throw createError({ statusCode: 400, message: error.message, data: error.errors }); }
-    throw createError({ statusCode: 500, message: "An unexpected error occurred while updating the SOP.", cause: error });
+    if (error instanceof z.ZodError) { 
+      throw createError({ statusCode: 400, message: error.message, data: error.format() }); 
+    }
+    if (error.name === 'ValidationError') { 
+      throw createError({ statusCode: 400, message: error.message, data: error.errors }); 
+    }
+    throw createError({ 
+      statusCode: 500, 
+      message: "An unexpected error occurred while updating the SOP.", 
+      cause: error 
+    });
   }
 });
