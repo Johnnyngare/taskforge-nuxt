@@ -11,7 +11,7 @@ const SopAttachmentSchema = new Schema<ISopAttachment>(
     storedName: { type: String, required: true },
     mimeType: { type: String, required: true },
     size: { type: Number, required: true },
-    path: { type: String, required: true },
+    path: { type: String, required: false },
     url: { type: String, required: true },
     uploadedAt: { type: Date, default: Date.now, required: true },
     uploadedBy: {
