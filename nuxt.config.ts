@@ -35,7 +35,7 @@ export default defineNuxtConfig({
         (process.dev ? "http://localhost:3000" : "https://taskforge-nuxt.vercel.app"),
     },
   },
-
+  // Forced deploy for vue-toastification fix
   // Remove the nitro.publicAssets configuration since we're using Vercel Blob
   // nitro: {
   //   publicAssets: [

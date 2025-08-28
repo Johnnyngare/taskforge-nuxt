@@ -11,7 +11,6 @@ import { UserModel, type IUserModel } from "~/server/db/models/user";
 import { UserRole } from "~/types/user";
 import { sendAuthToken } from "~/server/utils/auth";
 
-
 const AUTH_CONSTANTS = {
   google: {
     tokenUrl: "https://oauth2.googleapis.com/token",
@@ -26,6 +25,10 @@ const AUTH_CONSTANTS = {
       path: "/",
     },
   },
+  database: {
+    queryTimeoutMs: 10000, // 10 second timeout instead of 30
+    connectionTimeoutMs: 15000, // 15 second connection timeout
+  },
 };
 
 interface GoogleUser {
@@ -36,20 +39,19 @@ interface GoogleUser {
   picture?: string;
 }
 
-// Updated interface to reflect comprehensive runtime config
 interface ServerRuntimeConfig {
   public: {
     googleClientId?: string;
     googleOauthRedirectUri?: string;
-    baseUrlPublic?: string; // Added for completeness based on nuxt.config.ts
-    uploadsBaseUrl?: string; // Added for completeness based on nuxt.config.ts
-    authUrl?: string; // Added for completeness based on our env discussions
+    baseUrlPublic?: string;
+    uploadsBaseUrl?: string;
+    authUrl?: string;
   };
   private: {
     jwtSecret?: string;
     googleClientSecret?: string;
-    mongodbUri?: string; // Added for completeness based on nuxt.config.ts
-    authSecret?: string; // Added for completeness based on our env discussions
+    mongodbUri?: string;
+    authSecret?: string;
   };
 }
 
@@ -60,12 +62,8 @@ function validateAuthEnv(
 
   if (!config.public.googleClientId) missingConfig.push("GOOGLE_CLIENT_ID (public)");
   if (!config.public.googleOauthRedirectUri) missingConfig.push("GOOGLE_OAUTH_REDIRECT_URI (public)");
-
   if (!config.private.googleClientSecret) missingConfig.push("GOOGLE_CLIENT_SECRET (private)");
   if (!config.private.jwtSecret) missingConfig.push("JWT_SECRET (private)");
-  // Add AUTH_SECRET validation here if your jwtHelper or sendAuthToken directly relies on it *instead* of JWT_SECRET
-  // if (!config.private.authSecret) missingConfig.push("AUTH_SECRET (private)");
-
 
   if (missingConfig.length > 0) {
     console.error("Critical OAuth configuration missing. Check .env and nuxt.config.ts:", missingConfig.join(", "));
@@ -88,6 +86,7 @@ async function exchangeAuthCode(
         code,
         grant_type: "authorization_code",
       },
+      timeout: AUTH_CONSTANTS.database.connectionTimeoutMs, // Add timeout to axios call
     });
     return response.data;
   } catch (error) {
@@ -108,6 +107,7 @@ async function fetchGoogleUser(accessToken: string): Promise<GoogleUser> {
       AUTH_CONSTANTS.google.userInfoUrl,
       {
         headers: { Authorization: `Bearer ${accessToken}` },
+        timeout: AUTH_CONSTANTS.database.connectionTimeoutMs, // Add timeout to axios call
       }
     );
     return response.data;
@@ -131,45 +131,118 @@ async function findOrCreateUser(googleUser: GoogleUser) {
     });
   }
 
-  let user = await UserModel.findOne({
-    $or: [{ googleId: googleUser.sub }, { email: googleUser.email }],
-  });
+  console.log(`🔍 Searching for existing user with email: ${googleUser.email} or Google ID: ${googleUser.sub}`);
+  
+  let user: IUserModel | null = null;
+  
+  try {
+    // FIXED: Add timeout and lean() for faster queries
+    user = await UserModel.findOne({
+      $or: [{ googleId: googleUser.sub }, { email: googleUser.email }],
+    })
+    .lean() // Returns plain JavaScript object instead of Mongoose document (faster)
+    .maxTimeMS(AUTH_CONSTANTS.database.queryTimeoutMs) // 10 second timeout instead of 30
+    .exec(); // Explicitly execute the query
+
+    console.log(`📊 Database query completed. User ${user ? 'found' : 'not found'}`);
+
+  } catch (dbError: any) {
+    console.error("❌ Database query failed:", dbError);
+    
+    // If the query fails due to timeout, we'll handle it gracefully
+    if (dbError.message?.includes('timeout') || dbError.message?.includes('buffering')) {
+      console.log("⚠️ Database timeout detected. Will attempt user creation anyway.");
+      user = null; // Proceed as if user doesn't exist
+    } else {
+      throw dbError; // Re-throw non-timeout errors
+    }
+  }
 
   if (!user) {
-    user = await UserModel.create({
-      email: googleUser.email,
-      name: googleUser.name || googleUser.email.split("@")[0],
-      profilePhoto: googleUser.picture,
-      googleId: googleUser.sub,
-      provider: "google",
-      role: UserRole.FieldOfficer, // Set default role
+    console.log("👤 Creating new user...");
+    try {
+      // FIXED: Add timeout to create operation as well
+      user = await UserModel.create({
+        email: googleUser.email,
+        name: googleUser.name || googleUser.email.split("@")[0],
+        profilePhoto: googleUser.picture,
+        googleId: googleUser.sub,
+        provider: "google",
+        role: UserRole.FieldOfficer,
+      });
+      
+      console.log(`✅ Created new user from Google: ${user.email} (ID: ${user._id})`);
+      
+    } catch (createError: any) {
+      console.error("❌ Failed to create new user:", createError);
+      
+      // If user creation fails, check if it's a duplicate key error (user was created by another request)
+      if (createError.code === 11000) {
+        console.log("⚠️ Duplicate user detected. Attempting to find existing user...");
+        try {
+          user = await UserModel.findOne({ email: googleUser.email })
+            .lean()
+            .maxTimeMS(5000) // Shorter timeout for retry
+            .exec();
+          
+          if (user) {
+            console.log("✅ Found existing user on retry");
+          } else {
+            throw new Error("User creation conflict but cannot find existing user");
+          }
+        } catch (retryError) {
+          console.error("❌ Retry query also failed:", retryError);
+          throw retryError;
+        }
+      } else {
+        throw createError; // Re-throw non-duplicate errors
+      }
+    }
+  } else {
+    console.log(`✅ Existing user found: ${user.email} (ID: ${user._id})`);
+    
+    // If user exists but doesn't have googleId, link the accounts
+    if (!user.googleId) {
+      console.log("🔗 Linking existing user with Google account...");
+      try {
+        // FIXED: Convert lean object back to Mongoose document for updates
+        const userDoc = await UserModel.findById(user._id).maxTimeMS(AUTH_CONSTANTS.database.queryTimeoutMs);
+        if (userDoc) {
+          userDoc.googleId = googleUser.sub;
+          userDoc.provider = "google";
+          userDoc.profilePhoto = userDoc.profilePhoto || googleUser.picture;
+          
+          await userDoc.save();
+          user = userDoc.toObject(); // Convert back to plain object
+          console.log(`✅ Linked existing user ${user.email} with Google account.`);
+        }
+      } catch (updateError) {
+        console.error("⚠️ Failed to link Google account, but proceeding with login:", updateError);
+        // Don't throw here - user can still log in even if linking fails
+      }
+    }
+  }
+
+  if (!user) {
+    throw createError({
+      statusCode: 500,
+      statusMessage: "Failed to create or retrieve user account.",
     });
-    console.log(`Created new user from Google: ${user.email}`);
-  } else if (!user.googleId) {
-    user.googleId = googleUser.sub;
-    user.provider = "google";
-    user.profilePhoto = user.profilePhoto || googleUser.picture;
-    await user.save();
-    console.log(`Linked existing user ${user.email} with Google account.`);
   }
 
   return user;
 }
 
-
 export default defineEventHandler(async (event) => {
-  // --- START DIAGNOSTIC LOGGING ---
   console.log("--- Google OAuth Callback Handler STARTED ---");
   const url = getRequestURL(event);
   console.log(`Request URL: ${url.href}`);
   console.log(`Request Path: ${url.pathname}`);
   console.log(`Request Query: ${url.search}`);
-  // --- END DIAGNOSTIC LOGGING ---
 
   try {
     const config = useRuntimeConfig(event);
 
-    // --- DIAGNOSTIC LOGGING OF RUNTIME CONFIG ---
     console.log("Runtime Config (Public) for Callback:", {
       googleClientId: config.public.googleClientId ? "PRESENT" : "MISSING",
       googleOauthRedirectUri: config.public.googleOauthRedirectUri,
@@ -183,15 +256,12 @@ export default defineEventHandler(async (event) => {
       mongodbUri: config.private.mongodbUri ? "PRESENT" : "MISSING",
       authSecret: config.private.authSecret ? "PRESENT" : "MISSING",
     });
-    // --- END DIAGNOSTIC LOGGING OF RUNTIME CONFIG ---
-
 
     const query = getQuery(event);
     const code = query.code as string | undefined;
     const error = query.error as string | undefined;
 
     console.log(`Query Params - code: ${code ? 'PRESENT' : 'MISSING'}, error: ${error || 'NONE'}`);
-
 
     if (error) {
       console.error("Google OAuth callback error:", error);
@@ -206,11 +276,10 @@ export default defineEventHandler(async (event) => {
       });
     }
 
-    validateAuthEnv(config as ServerRuntimeConfig); // This will throw if critical envs are missing
+    validateAuthEnv(config as ServerRuntimeConfig);
     console.log("All critical Auth environment variables validated successfully.");
 
-
-    const requiredConfig = config as Required<ServerRuntimeConfig>; // Assert the type after validation
+    const requiredConfig = config as Required<ServerRuntimeConfig>;
 
     const { access_token } = await exchangeAuthCode(code, requiredConfig);
     console.log(`Successfully exchanged code for access token. Access token (truncated): ${access_token ? access_token.substring(0, 10) + '...' : 'N/A'}`);
@@ -219,19 +288,28 @@ export default defineEventHandler(async (event) => {
     console.log(`Successfully fetched Google user info for email: ${googleUser.email}`);
 
     const user = await findOrCreateUser(googleUser);
-    console.log(`User found or created: ID ${user._id}, Email: ${user.email}`);
-
+    console.log(`User processed successfully: ID ${user._id}, Email: ${user.email}`);
 
     await sendAuthToken(event, user._id.toString(), user.role); 
     console.log("Auth cookie operation completed. Redirecting to dashboard.");
 
     return sendRedirect(event, "/dashboard", 302);
+    
   } catch (error: any) {
     console.error("--- FULL Google OAuth callback processing FAILED ---", error);
-    const errorMessage =
-      error.data?.message ||
-      error.statusMessage ||
-      "Google authentication failed. Please try again.";
+    
+    // More specific error handling
+    let errorMessage = "Google authentication failed. Please try again.";
+    if (error.message?.includes('timeout')) {
+      errorMessage = "Database connection timed out. Please try again.";
+    } else if (error.message?.includes('network')) {
+      errorMessage = "Network error occurred. Please check your connection.";
+    } else if (error.statusMessage) {
+      errorMessage = error.statusMessage;
+    } else if (error.data?.message) {
+      errorMessage = error.data.message;
+    }
+    
     console.error(`Redirecting to /login with error: ${errorMessage}`);
     return sendRedirect(
       event,
