@@ -1,4 +1,4 @@
-<!-- components/TaskList.vue -->
+<!-- components/TaskList.vue - UPDATED -->
 <template>
   <div class="space-y-3">
     <div
@@ -17,11 +17,10 @@
         v-for="task in tasks"
         :key="task.id"
         :task="task"
-        :is-selected="task.id === selectedTaskId" 
         @status-changed="handleStatusChanged"
         @edit="handleEdit"
         @delete="handleDelete"
-        @task-selected="handleTaskSelected"
+        @click="handleTaskCardClick(task)" 
       />
     </template>
   </div>
@@ -33,29 +32,30 @@ import TaskCard from "~/components/TaskCard.vue"; // Ensure TaskCard is imported
 
 const props = defineProps<{
   tasks: ITask[];
-  selectedTaskId: string | null; // ADDED: Correctly define selectedTaskId prop
+  // Removed selectedTaskId prop - not needed here for the new flow
 }>();
 
 const emit = defineEmits<{
   (e: "task-updated", taskId: string, updates: Partial<ITask>): void;
   (e: "task-deleted", taskId: string): void;
-  (e: "edit-task", taskId: string): void;
-  (e: "task-selected", task: ITask): void;
+  (e: "edit-task", task: ITask): void; // CHANGED: Pass full task object for edit
+  (e: "task-selected", task: ITask): void; // NEW: Event for selecting/viewing a task
 }>();
 
 const handleStatusChanged = (taskId: string, updates: Partial<ITask>) => {
   emit("task-updated", taskId, updates);
 };
 
-const handleEdit = (taskId: string) => {
-  emit("edit-task", taskId);
+// CHANGED: Now receives the full task object
+const handleEdit = (task: ITask) => {
+  emit("edit-task", task);
 };
 
 const handleDelete = (taskId: string) => {
   emit("task-deleted", taskId);
 };
 
-const handleTaskSelected = (task: ITask) => {
+const handleTaskCardClick = (task: ITask) => {
   emit("task-selected", task);
 };
 </script>

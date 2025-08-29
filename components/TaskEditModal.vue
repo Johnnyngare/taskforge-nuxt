@@ -1,4 +1,3 @@
-<!-- components/TaskEditModal.vue -->
 <template>
   <UModal v-model="isModalOpen" :prevent-close="submitting" @update:model-value="$emit('cancel')">
     <UCard
@@ -81,6 +80,27 @@
             />
           </UFormGroup>
         </div>
+
+        <!-- NEW: Assign to Field Officer Dropdown -->
+        <UFormGroup
+          label="Assign to Field Officer(s) (optional)"
+          for="edit-assignedTo"
+          class="mb-1 block text-sm font-medium text-slate-300"
+        >
+          <USelect
+            id="edit-assignedTo"
+            v-model="editForm.assignedTo"
+            :options="fieldOfficerOptions"
+            option-attribute="label"
+            value-attribute="value"
+            :disabled="submitting || fieldOfficersPending"
+            multiple
+            placeholder="Select Field Officer(s)"
+          />
+          <p v-if="fieldOfficersError" class="mt-1 text-xs text-red-400">
+            Error loading field officers: {{ fieldOfficersError.message }}
+          </p>
+        </UFormGroup>
 
         <!-- Project Selector -->
         <UFormGroup
@@ -201,18 +221,12 @@
 <script setup lang="ts">
 import { ref, computed, watch, onMounted, nextTick } from 'vue';
 import { useProjects } from '~/composables/useProjects';
+import { useTasks } from '~/composables/useTasks';
 import { TaskPriority, TaskStatus, TaskType, type ITask, type GeoJSONPoint } from '~/types/task';
 import { useAppToast } from '~/composables/useAppToast';
-import { useLeaflet as useNuxtLeaflet } from '#imports'; // Keep this for the L composable
-
-// REMOVED: Explicit imports for LMap, LTileLayer, LMarker, LPopup.
-// Nuxt's auto-import should handle these for template usage.
-// If your IDE complains about types, you might need to import them as types, e.g.,
-// import type { LMap, LTileLayer, LMarker, LPopup } from '@nuxtjs/leaflet';
-// But the runtime import is what causes the error.
-
-// Import types for core Leaflet objects directly from 'leaflet'
+import { useLeaflet as useNuxtLeaflet } from '#imports';
 import type { Map as LeafletMapInstance, LatLngExpression, LeafletMouseEvent, LeafletEvent } from 'leaflet';
+import type { IUser } from '~/types/user';
 
 interface Props {
   task: ITask | null;
@@ -227,8 +241,9 @@ const emit = defineEmits<{
 }>();
 
 const { projects, pending: projectsPending, error: projectsError } = useProjects();
+const { fieldOfficers, fieldOfficersPending, error: fieldOfficersError } = useTasks();
 const toast = useAppToast();
-const { L } = useNuxtLeaflet(); // Use the L object from the @nuxtjs/leaflet composable
+const { L } = useNuxtLeaflet();
 
 const submitting = ref(false);
 
@@ -236,8 +251,10 @@ interface EditForm {
   title: string;
   description: string | null;
   priority: TaskPriority;
+  status: TaskStatus;
   dueDate: string | null;
   projectId: string | null;
+  assignedTo: string[]; // This will hold an array of IDs from the USelect
   cost: number | null;
   taskType: TaskType;
   location: GeoJSONPoint | undefined;
@@ -247,8 +264,10 @@ const editForm = ref<EditForm>({
   title: '',
   description: null,
   priority: TaskPriority.Medium,
+  status: TaskStatus.Pending,
   dueDate: null,
   projectId: null,
+  assignedTo: [],
   cost: null,
   taskType: TaskType.Office,
   location: undefined,
@@ -259,7 +278,7 @@ const isModalOpen = computed({
   set: (value) => emit('update:modelValue', value),
 });
 
-const mapRef = ref<InstanceType<typeof LMap> | null>(null); // Ref to the LMap component
+const mapRef = ref<InstanceType<typeof LMap> | null>(null);
 const mapInstance = ref<LeafletMapInstance | null>(null);
 const selectedCoordinates = ref<[number, number] | null>(null);
 const initialMapZoom = 13;
@@ -271,17 +290,22 @@ const initializeForm = () => {
       title: props.task.title,
       description: props.task.description || null,
       priority: props.task.priority,
+      status: props.task.status,
       dueDate: props.task.dueDate ? props.task.dueDate.split('T')[0] : null,
-      projectId: props.task.projectId || null,
+      projectId: (typeof props.task.project === 'object' && props.task.project !== null) ? props.task.project.id : props.task.projectId || null,
+      // CRITICAL FIX: Ensure assignedTo is always an array of IDs, handling populated objects
+      assignedTo: props.task.assignedTo?.map(a => typeof a === 'object' ? a.id : a) || [],
       cost: props.task.cost !== undefined ? props.task.cost : null,
       taskType: props.task.taskType || TaskType.Office,
       location: props.task.location ? { ...props.task.location } : undefined,
     };
 
+    // Map initialization for existing location
     if (editForm.value.taskType === TaskType.Field && editForm.value.location) {
       initialMapCenter.value = [editForm.value.location.coordinates[1], editForm.value.location.coordinates[0]];
       selectedCoordinates.value = [...editForm.value.location.coordinates];
     } else {
+      // Default behavior if no location or Office task
       if (navigator.geolocation) {
         navigator.geolocation.getCurrentPosition(
           (position) => {
@@ -296,6 +320,13 @@ const initializeForm = () => {
         );
       }
     }
+  } else {
+    // This branch should ideally not be hit if this is purely an EditModal
+    editForm.value = {
+      title: '', description: null, priority: TaskPriority.Medium, status: TaskStatus.Pending,
+      dueDate: null, projectId: null, assignedTo: [], cost: null, taskType: TaskType.Office, location: undefined,
+    };
+    selectedCoordinates.value = null;
   }
 };
 
@@ -313,10 +344,23 @@ watch(() => props.modelValue, (newValue) => {
 
 const onMapReady = (map: LeafletMapInstance) => {
   mapInstance.value = map;
-  if (editForm.value.taskType === TaskType.Field && editForm.value.location) {
-    const currentLatLng: LatLngExpression = [editForm.value.location.coordinates[1], editForm.value.location.coordinates[0]];
+  if (editForm.value.taskType === TaskType.Field && selectedCoordinates.value) {
+    const currentLatLng: LatLngExpression = [selectedCoordinates.value[1], selectedCoordinates.value[0]];
     mapInstance.value.setView(currentLatLng, initialMapZoom);
+  } else if (L.value && navigator.geolocation) {
+      navigator.geolocation.getCurrentPosition(
+        (position) => {
+          const lat = position.coords.latitude;
+          const lng = position.coords.longitude;
+          mapInstance.value?.setView([lat, lng], initialMapZoom);
+        },
+        (error) => {
+          console.warn("TaskEditModal: Geolocation error for map center:", error.message);
+        },
+        { enableHighAccuracy: true, timeout: 5000, maximumAge: 0 }
+      );
   }
+
 
   if (L.value) {
     mapInstance.value.on('click', (e: LeafletMouseEvent) => {
@@ -357,6 +401,12 @@ const projectOptions = computed(() =>
   projects.value.map((p) => ({ label: p.name, value: p.id }))
 );
 
+const fieldOfficerOptions = computed(() =>
+  // Added 'Unassigned' option at the beginning
+  [{ label: 'Unassigned', value: null }, ...(fieldOfficers.value?.map((fo: IUser) => ({ label: fo.name, value: fo.id })) || [])]
+);
+
+
 const saveChanges = async () => {
   if (!editForm.value.title.trim() || submitting.value) {
     toast.add({
@@ -389,6 +439,7 @@ const saveChanges = async () => {
         ? new Date(`${editForm.value.dueDate}T00:00:00Z`).toISOString()
         : undefined,
       projectId: editForm.value.projectId || undefined,
+      assignedTo: editForm.value.assignedTo.length > 0 ? editForm.value.assignedTo : undefined, // NEW: Send assignedTo if selected
       cost: editForm.value.cost !== null ? editForm.value.cost : undefined,
       taskType: editForm.value.taskType,
       location:
@@ -397,15 +448,37 @@ const saveChanges = async () => {
           : undefined,
     };
 
-    Object.keys(updatedData).forEach((key) => {
-      const value = (updatedData as any)[key];
-      if (value === undefined || value === null) {
-        delete (updatedData as any)[key];
+    // Clean up undefined/null/empty string values from updatedData payload
+    // This logic ensures that if a field is not explicitly meant to be set to null,
+    // and it's undefined or empty from the form, it's not included in the payload.
+    // However, explicitly nullable fields (description, dueDate, projectId, cost, location)
+    // should pass null if that's the intention from the form.
+    const finalUpdatedData: Partial<ITask> = {};
+    for (const key in updatedData) {
+      const value = updatedData[key as keyof Partial<ITask>];
+      // For nullable fields, allow explicit null or undefined (if no change)
+      if (value === null || value === undefined) {
+          // If the original task had a value, and new value is undefined, it means no change.
+          // If new value is explicitly null, it means clearing.
+          // The backend expects null to clear, or undefined for no change.
+          // So, if value is null, keep it. If value is undefined, it means no update for this field.
+          if (value === null) {
+              (finalUpdatedData as any)[key] = null;
+          }
+      } else if (typeof value === 'string' && value.trim() === '') {
+          // Treat empty string for optional/nullable string fields as null/undefined
+          (finalUpdatedData as any)[key] = null;
+      } else if (key === 'assignedTo' && Array.isArray(value) && value.length === 0) {
+          (finalUpdatedData as any)[key] = []; // Explicitly send empty array to clear assignments
       }
-    });
+      else {
+          (finalUpdatedData as any)[key] = value;
+      }
+    }
 
-    emit('save', props.task!.id, updatedData);
-    isModalOpen.value = false;
+
+    emit('save', props.task!.id, finalUpdatedData); // Use finalUpdatedData
+    // isModalOpen.value = false; // Moved to parent handleSaveEdit
   } catch (error: any) {
     console.error('Error preparing task update:', error);
     toast.add({

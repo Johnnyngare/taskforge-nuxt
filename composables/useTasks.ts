@@ -1,13 +1,18 @@
-// composables/useTasks.ts
-import { useAsyncData } from '#app';
-import type { ITask } from '~/types/task';
-import { useAuth } from '~/composables/useAuth';
+// composables/useTasks.ts - UPDATED
+import { useAsyncData, useFetch } from '#app';
 import { useApi } from '~/composables/useApi';
+import { useAuth } from '~/composables/useAuth';
+import { useAppToast } from '~/composables/useAppToast';
+import type { ITask } from '~/types/task';
+import type { IUser } from '~/types/user'; // Import IUser
+import { UserRole } from '~/types/user'; // Import UserRole
 
 export const useTasks = () => {
-  const { user } = useAuth();
   const api = useApi();
+  const toast = useAppToast();
+  const { user, isAuthenticated } = useAuth();
 
+  // Fetch main tasks list
   const {
     data: tasks,
     pending,
@@ -16,15 +21,36 @@ export const useTasks = () => {
   } = useAsyncData<ITask[]>(
     'tasks',
     () => {
-      if (!user.value) return Promise.resolve([]);
+      if (!isAuthenticated.value) return Promise.resolve([]);
       // EXPECTED FIX: API directly returns ITask[]
       return api<ITask[]>('/tasks');
     },
     {
       default: () => [],
-      watch: [user],
+      watch: [isAuthenticated],
     }
   );
+
+  // NEW: Fetch all field officers for task assignment dropdowns
+  const { data: fieldOfficers, refresh: refreshFieldOfficers, pending: fieldOfficersPending, error: fieldOfficersError } = useAsyncData<IUser[]>(
+    'fieldOfficers',
+    async () => {
+      if (!isAuthenticated.value) return [];
+      // Call the new API endpoint to get users with 'field_officer' role
+      // This will only run if authenticated.
+      try {
+        return api<IUser[]>(`/users?role=${UserRole.FieldOfficer}`);
+      } catch (err) {
+        console.error('useTasks: Failed to fetch field officers:', err);
+        return [];
+      }
+    },
+    {
+      default: () => [],
+      watch: [isAuthenticated], // Refresh when auth status changes
+    }
+  );
+
 
   const createTask = async (taskData: Partial<ITask>) => {
     await api('/tasks', { method: 'POST', body: taskData });
@@ -49,5 +75,10 @@ export const useTasks = () => {
     createTask,
     updateTask,
     deleteTask,
+    // NEW: Expose field officers for UI dropdowns
+    fieldOfficers,
+    fieldOfficersPending,
+    fieldOfficersError,
+    refreshFieldOfficers,
   };
 };

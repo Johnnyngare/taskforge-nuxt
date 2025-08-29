@@ -1,4 +1,4 @@
-<!-- pages/dashboard/index.vue -->
+<!-- pages/dashboard/index.vue - UPDATED -->
 <template>
   <div>
     <!-- Welcome Banner -->
@@ -18,8 +18,8 @@
       class="mb-6 flex flex-col items-start justify-between gap-4 sm:flex-row sm:items-center"
     >
       <div class="flex flex-wrap gap-3">
-        <!-- UPDATED: Using UButton -->
-        <UButton @click="openQuickAddModal" icon="i-heroicons-plus">
+        <!-- Button to open Quick Add Task modal via route query -->
+        <UButton @click="navigateToOpenQuickAddModal" icon="i-heroicons-plus">
           Add Task
         </UButton>
       </div>
@@ -30,11 +30,11 @@
     </div>
 
     <!-- Quick Add Modal (Using DashboardQuickAddTask component inside a UModal) -->
-    <!-- The v-model on UModal makes it easy to control visibility -->
+    <!-- v-model controls visibility, @close from modal content will trigger closeQuickAddModalFromRoute -->
     <UModal v-model="showQuickAdd" prevent-close>
       <DashboardQuickAddTask
         @task-created="handleTaskCreated"
-        @close="showQuickAdd = false"
+        @close="closeQuickAddModalFromRoute"
       />
     </UModal>
 
@@ -67,11 +67,9 @@
             <UButton @click="refresh" variant="secondary"> Try Again </UButton>
           </div>
 
-          <!-- TaskList (assuming this is updated to use UCard/UBadge etc. if needed) -->
           <TaskList
             v-else
             :tasks="Array.isArray(tasks) ? tasks.slice(0, 6) : []"
-            :selected-task-id="editingTask?.id || selectedTaskId"
             @task-updated="handleTaskUpdate"
             @task-deleted="handleTaskDelete"
             @edit-task="handleEditTask"
@@ -131,7 +129,6 @@
     </div>
 
     <!-- Edit Modal -->
-    <!-- UModal now uses v-model. editingTask is the object, showTaskEditModal controls visibility -->
     <TaskEditModal
       v-model="showTaskEditModal"
       :task="editingTask"
@@ -142,14 +139,16 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, nextTick } from 'vue'; // Added nextTick
+import { ref, computed, nextTick, watch, onMounted } from 'vue'; // Added 'watch', 'onMounted'
+import { useRoute, useRouter } from '#app'; // NEW: Import useRoute and useRouter
 import { useTasks } from '~/composables/useTasks';
 import { useAuth } from '~/composables/useAuth';
 import { type ITask, TaskStatus, TaskType } from '~/types/task';
-import { useAppToast } from '~/composables/useAppToast'; // CORRECTED: Use useAppToast
+import { useAppToast } from '~/composables/useAppToast';
 import DashboardFieldTasksMap from '~/components/dashboard/DashboardFieldTasksMap.vue';
 import DashboardQuickAddTask from '~/components/dashboard/QuickAddTask.vue';
 import TaskEditModal from '~/components/TaskEditModal.vue';
+import TaskList from '~/components/TaskList.vue';
 
 definePageMeta({
   layout: 'dashboard',
@@ -160,33 +159,49 @@ useSeoMeta({
   description: 'Manage your tasks and projects efficiently.',
 });
 
-const { tasks, pending, error, refresh, updateTask, deleteTask } = useTasks(); // Added updateTask, deleteTask
-const { user: authUser } = useAuth(); // isAuthenticated is usually sufficient
-const toast = useAppToast(); // CORRECTED: Use useAppToast
+const { tasks, pending, error, refresh, updateTask, deleteTask } = useTasks();
+const { user: authUser } = useAuth();
+const toast = useAppToast();
 
+// NEW: Router and Route instances
+const route = useRoute();
+const router = useRouter();
+
+// showQuickAdd is now controlled by the route query
 const showQuickAdd = ref(false);
 const editingTask = ref<ITask | null>(null);
-const showTaskEditModal = ref(false); // Controls visibility of TaskEditModal
+const showTaskEditModal = ref(false);
 const fieldMapRef = ref<InstanceType<typeof DashboardFieldTasksMap> | null>(null);
-const selectedTaskId = ref<string | null>(null); // State to track selected task ID
 
-
-const openQuickAddModal = () => {
-  showQuickAdd.value = true;
-  selectedTaskId.value = null; // Clear any task selection when opening quick add
+// NEW: Function to open the Quick Add Task modal (by setting query param)
+const navigateToOpenQuickAddModal = () => {
+  router.push({ query: { ...route.query, quickadd: 'true' } });
 };
 
-const handleTaskSelect = (task: ITask) => {
-  selectedTaskId.value = task.id; // Keep track of the selected task
+// NEW: Function to close the Quick Add Task modal (by removing query param)
+const closeQuickAddModalFromRoute = () => {
+  showQuickAdd.value = false; // Immediately close local state
+  if (route.query.quickadd) {
+    // Replace current route to remove the 'quickadd' parameter
+    router.replace({ query: { ...route.query, quickadd: undefined } });
+  }
+};
 
+// NEW: Watch route query parameter to control modal visibility
+watch(() => route.query.quickadd, (newValue) => {
+  showQuickAdd.value = newValue === 'true';
+}, { immediate: true }); // Run immediately on mount to check initial URL
+
+onMounted(() => {
+  // Ensure tasks are loaded when the dashboard mounts
+  refresh();
+});
+
+const handleTaskSelect = (task: ITask) => {
+  // This is for dashboard/map interaction, not the edit modal
   // If a field task, trigger map focus and invalidateSize
   if (task.taskType === TaskType.Field && fieldMapRef.value) {
     fieldMapRef.value.focusOnTask(task);
-    // CRITICAL: Call invalidateSize() on the map *after* focusing
-    // The focusOnTask should ideally call triggerInvalidateSize internally
-    // or you can call it here if DashboardFieldTasksMap exposes it.
-    // Assuming `focusOnTask` in DashboardFieldTasksMap already handles it or we pass a trigger.
-    // For safety, let's explicitly trigger invalidateSize from here.
     nextTick(() => {
       fieldMapRef.value?.triggerInvalidateSize();
     });
@@ -214,11 +229,10 @@ const upcomingTasks = computed(() => {
 });
 
 const handleTaskCreated = () => {
-  showQuickAdd.value = false; // Close the quick add modal
-  selectedTaskId.value = null;
-  refresh(); // Refresh tasks list
+  closeQuickAddModalFromRoute(); // Use the new function to close and clear query
+  refresh(); // Refresh tasks on the dashboard after creation
   toast.add({
-    title: 'Task Added!',
+    title: 'Task Created!',
     description: 'Your new task has been successfully created.',
     color: 'green',
     icon: 'i-heroicons-check-circle',
@@ -256,7 +270,6 @@ const handleTaskDelete = async (taskId: string) => {
         color: 'green',
         icon: 'i-heroicons-check-circle',
       });
-      selectedTaskId.value = null; // Clear selection
       refresh();
     } catch (err: any) {
       console.error('Failed to delete task:', err);
@@ -272,7 +285,7 @@ const handleTaskDelete = async (taskId: string) => {
 
 const handleEditTask = (taskToEdit: ITask) => {
   editingTask.value = taskToEdit;
-  showTaskEditModal.value = true; // Open the modal
+  showTaskEditModal.value = true;
 };
 
 const handleSaveEdit = async (taskId: string, updatedData: Partial<ITask>) => {
@@ -284,8 +297,6 @@ const handleSaveEdit = async (taskId: string, updatedData: Partial<ITask>) => {
       color: 'green',
       icon: 'i-heroicons-check-circle',
     });
-    closeTaskEditModal();
-    refresh();
   } catch (err: any) {
     console.error('Failed to save task edit:', err);
     toast.add({
@@ -294,13 +305,15 @@ const handleSaveEdit = async (taskId: string, updatedData: Partial<ITask>) => {
       color: 'red',
       icon: 'i-heroicons-exclamation-triangle',
     });
+  } finally {
+    closeTaskEditModal();
+    refresh();
   }
 };
 
 const closeTaskEditModal = () => {
   editingTask.value = null; // Clear the task being edited
   showTaskEditModal.value = false; // Close the modal
-  selectedTaskId.value = null; // Clear selection on modal close
 };
 
 

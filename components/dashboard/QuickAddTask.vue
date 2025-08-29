@@ -1,4 +1,4 @@
-//components/dashboard/QuickAddTask.vue
+// components/dashboard/QuickAddTask.vue - UPDATED
 <template>
   <UCard
     class="shadow-sm"
@@ -87,6 +87,27 @@
           />
         </UFormGroup>
       </div>
+
+      <!-- NEW: Assign to Field Officer Dropdown -->
+      <UFormGroup
+        label="Assign to Field Officer(s) (optional)"
+        for="quick-assignedTo"
+        class="mb-1 block text-sm font-medium text-slate-300"
+      >
+        <USelect
+          id="quick-assignedTo"
+          v-model="form.assignedTo"
+          :options="fieldOfficerOptions"
+          option-attribute="label"
+          value-attribute="value"
+          :disabled="submitting || fieldOfficersPending"
+          multiple
+          placeholder="Select Field Officer(s)"
+        />
+        <p v-if="fieldOfficersError" class="mt-1 text-xs text-red-400">
+          Error loading field officers: {{ fieldOfficersError.message }}
+        </p>
+      </UFormGroup>
 
       <!-- Project Selector -->
       <UFormGroup
@@ -236,8 +257,9 @@ import type {
   LatLngExpression,
   LeafletMouseEvent,
 } from 'leaflet';
+import type { IUser } from '~/types/user'; // Import IUser
 
-const { createTask } = useTasks();
+const { createTask, fieldOfficers, fieldOfficersPending, error: fieldOfficersError } = useTasks();
 const {
   projects,
   pending: projectsPending,
@@ -262,6 +284,11 @@ interface QuickAddForm {
   priority: TaskPriority;
   dueDate: string;
   projectId: string | null;
+  // CRITICAL FIX: assignedTo is now a single string for the USelect model,
+  // but will be converted to string[] for the backend payload.
+  // The USelect in the template is implicitly a single-select unless `multiple` is added.
+  // Since the backend expects an array, even for single selection, we must handle it.
+  assignedTo: string | null; // Changed to string | null for USelect v-model
   cost?: number | null;
   taskType: TaskType;
   location?: GeoJSONPoint;
@@ -273,6 +300,7 @@ const form = ref<QuickAddForm>({
   priority: TaskPriority.Medium,
   dueDate: '',
   projectId: null,
+  assignedTo: null, // CRITICAL FIX: Initialize as null for single-select USelect
   cost: null,
   taskType: TaskType.Office,
   location: undefined,
@@ -280,7 +308,13 @@ const form = ref<QuickAddForm>({
 
 const today = computed(() => new Date().toISOString().split('T')[0]);
 const projectOptions = computed(() =>
-  projects.value.map((p) => ({ label: p.name, value: p.id }))
+  projects.value?.map((p) => ({ label: p.name, value: p.id })) || []
+);
+
+// Options for Field Officer dropdown
+const fieldOfficerOptions = computed(() =>
+  // Added 'Unassigned' option at the beginning
+  [{ label: 'Unassigned', value: null }, ...(fieldOfficers.value?.map((fo: IUser) => ({ label: fo.name, value: fo.id })) || [])]
 );
 
 // Map configuration
@@ -297,7 +331,6 @@ const onMapReady = (
   L.value = leafletModule;
   isMapReady.value = true;
 
-  // Attach click handler when map is ready
   map.on('click', handleMapClick);
   console.log('QuickAddTask: Click handler attached to map');
 };
@@ -317,7 +350,6 @@ const handleMapClick = (e: LeafletMouseEvent) => {
 onMounted(() => {
   console.log('QuickAddTask: Component mounted, client-side:', process.client);
 
-  // Try to get user location for better UX
   if (process.client && navigator?.geolocation) {
     navigator.geolocation.getCurrentPosition(
       (pos) => {
@@ -333,12 +365,12 @@ onMounted(() => {
           'QuickAddTask: Geolocation error (using default center):',
           error.message
         );
-      }
+      },
+      { enableHighAccuracy: true, timeout: 5000, maximumAge: 0 }
     );
   }
 });
 
-// Watch for task type changes
 watch(
   () => form.value.taskType,
   (newType, oldType) => {
@@ -348,7 +380,6 @@ watch(
       form.value.location = undefined;
       console.log('QuickAddTask: Cleared location for Office task');
     } else if (newType === TaskType.Field) {
-      // Trigger map size invalidation when switching to Field task
       nextTick(() => {
         mapInvalidateTrigger.value++;
         console.log(
@@ -390,6 +421,7 @@ const submitTask = async () => {
     title: form.value.title,
     taskType: form.value.taskType,
     hasLocation: !!form.value.location,
+    assignedTo: form.value.assignedTo, // Current single string or null
   });
 
   try {
@@ -402,6 +434,8 @@ const submitTask = async () => {
         ? new Date(`${form.value.dueDate}T00:00:00Z`).toISOString()
         : undefined,
       projectId: form.value.projectId || undefined,
+      // CRITICAL FIX: Wrap assignedTo in an array if not null/undefined
+      assignedTo: form.value.assignedTo ? [form.value.assignedTo] : undefined, // NEW: Ensure it's an array or undefined
       cost: form.value.cost != null ? form.value.cost : undefined,
       taskType: form.value.taskType,
       location: form.value.location,
@@ -425,6 +459,7 @@ const submitTask = async () => {
       priority: TaskPriority.Medium,
       dueDate: '',
       projectId: null,
+      assignedTo: null, // CRITICAL FIX: Reset to null
       cost: null,
       taskType: TaskType.Office,
       location: undefined,

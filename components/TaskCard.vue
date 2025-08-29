@@ -1,11 +1,11 @@
-<!-- components/TaskCard.vue -->
+<!-- components/TaskCard.vue - UPDATED -->
 <template>
   <div
     ref="cardRef"
-    @click="selectTask"
+    @click="handleCardClick"
     :class="{
-      'cursor-pointer': task.taskType === TaskType.Field,
-      'border-emerald-500 ring-2 ring-emerald-500/50': isSelected, // ADDED: Class for highlight
+      'cursor-pointer': true,
+      'border-emerald-500 ring-2 ring-emerald-500/50': isSelected,
     }"
     class="group rounded-xl border border-slate-700 bg-slate-800 p-4 shadow-md transition-all duration-200 hover:border-emerald-400"
   >
@@ -88,7 +88,7 @@
         class="inline-flex items-center rounded-full bg-blue-500/10 px-2 py-1 text-xs font-medium text-blue-400"
       >
         <Icon name="heroicons:folder" class="mr-1.5 h-3 w-3" />
-        {{ task.project.name }}
+        {{ typeof task.project === 'object' ? task.project.name : task.project }}
       </span>
       <span
         v-if="typeof task.cost === 'number'"
@@ -114,6 +114,15 @@
           <span>{{ formatRelativeDate(task.createdAt) }}</span>
         </div>
       </div>
+       <div v-if="task.assignedTo && task.assignedTo.length > 0" class="flex items-center gap-1 text-slate-400">
+        <Icon name="heroicons:user-group" class="h-4 w-4" />
+        <span v-if="task.assignedTo.length === 1">
+          {{ typeof task.assignedTo[0] === 'object' ? task.assignedTo[0].name : task.assignedTo[0] }}
+        </span>
+        <span v-else>
+          {{ task.assignedTo.length }} officers
+        </span>
+      </div>
     </div>
   </div>
 </template>
@@ -122,15 +131,15 @@
 import { ref, computed } from "vue";
 import { onClickOutside } from "@vueuse/core";
 import { TaskStatus, TaskType, type ITask } from "~/types/task";
-import TaskPriorityBadge from "~/components/TaskPriorityBadge.vue"; // ADDED: Missing import for TaskPriorityBadge
+import TaskPriorityBadge from "~/components/TaskPriorityBadge.vue";
 
 const props = defineProps<{
   task: ITask;
-  isSelected: boolean; // ADDED: Correctly define isSelected prop
+  isSelected?: boolean; // CRITICAL FIX: Made optional with '?'
 }>();
 
 const emit = defineEmits<{
-  (e: "edit", id: string): void;
+  (e: "edit", task: ITask): void; // CHANGED: Pass full task object
   (e: "delete", id: string): void;
   (e: "status-changed", id: string, updates: { status: TaskStatus }): void;
   (e: "task-selected", task: ITask): void;
@@ -143,11 +152,11 @@ onClickOutside(cardRef, () => {
   showDropdown.value = false;
 });
 
-const selectTask = () => {
-  if (props.task.taskType === TaskType.Field) {
-    emit("task-selected", props.task);
-  }
+// Changed selectTask to handleCardClick and emits task-selected
+const handleCardClick = () => {
+  emit("task-selected", props.task);
 };
+
 
 const statusInfo = computed(() => {
   const statuses: Record<
@@ -199,8 +208,9 @@ const dueDateClasses = computed(() => {
 
 const toggleDropdown = () => (showDropdown.value = !showDropdown.value);
 
+// CHANGED: Emit full task object for edit
 const handleEdit = () => {
-  emit("edit", props.task.id);
+  emit("edit", props.task);
   showDropdown.value = false;
 };
 
@@ -239,6 +249,7 @@ const formatRelativeDate = (dateString: string) => {
 </script>
 
 <style scoped>
+/* Scoped styles are less likely to cause InvalidCharacterError globally, but still good to clean */
 @keyframes fade-in {
   from {
     opacity: 0;

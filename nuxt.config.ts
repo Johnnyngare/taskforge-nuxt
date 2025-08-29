@@ -1,4 +1,4 @@
-// nuxt.config.ts
+// nuxt.config.ts - UPDATED
 import { defineNuxtConfig } from "nuxt/config";
 
 export default defineNuxtConfig({
@@ -11,7 +11,7 @@ export default defineNuxtConfig({
     "@pinia/nuxt",
     "@vueuse/motion/nuxt",
     "@vueuse/nuxt",
-    "@nuxtjs/leaflet", 
+    "@nuxtjs/leaflet",
   ],
 
   runtimeConfig: {
@@ -22,16 +22,25 @@ export default defineNuxtConfig({
       authSecret: process.env.AUTH_SECRET,
       // Vercel Blob token - keep this private!
       blobReadWriteToken: process.env.BLOB_READ_WRITE_TOKEN,
+
+      // NEW: Mailtrap Credentials for Development Email Testing
+      mailtrapHost: process.env.MAILTRAP_HOST,
+      mailtrapPort: process.env.MAILTRAP_PORT, // Exposed as string, convert to Number in emailService.ts
+      mailtrapUser: process.env.MAILTRAP_USER,
+      mailtrapPass: process.env.MAILTRAP_PASS,
+
+      // Your SendGrid API Key for production emails
+      sendgridApiKey: process.env.SENDGRID_API_KEY,
     },
     public: {
       googleClientId: process.env.GOOGLE_CLIENT_ID,
       // Environment-aware fallback logic
-      googleOauthRedirectUri: process.env.GOOGLE_OAUTH_REDIRECT_URI || 
-        (process.dev 
+      googleOauthRedirectUri: process.env.GOOGLE_OAUTH_REDIRECT_URI ||
+        (process.dev
           ? "http://localhost:3000/api/oauth/google/callback"
           : "https://taskforge-nuxt.vercel.app/api/oauth/google/callback"),
-        
-      baseUrlPublic: process.env.BASE_URL_PUBLIC || 
+
+      baseUrlPublic: process.env.BASE_URL_PUBLIC ||
         (process.dev ? "http://localhost:3000" : "https://taskforge-nuxt.vercel.app"),
     },
   },

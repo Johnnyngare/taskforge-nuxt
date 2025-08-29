@@ -1,3 +1,4 @@
+//components/form/AppButton.vue
 <template>
   <button
     :type="type"

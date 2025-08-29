@@ -1,4 +1,4 @@
-// server/api/tasks/[id].patch.ts
+// server/api/tasks/[id].patch.ts - UPDATED
 import mongoose from "mongoose";
 import { z } from "zod";
 import { TaskModel } from "~/server/db/models/task";
@@ -8,6 +8,7 @@ import { UserRole } from "~/types/user";
 import type { ITask } from "~/types/task";
 import { TaskType, TaskStatus, TaskPriority } from "~/types/task";
 import type { H3Event } from 'h3';
+import { sendEmail, getTaskAssignmentEmailHtml } from '~/server/utils/emailService'; // NEW import for email service
 
 // Zod Schema for GeoJSON Point
 const geoJsonPointSchema = z.object({
@@ -29,7 +30,7 @@ const taskUpdateSchema = z
     status: z.enum(getEnumValues(TaskStatus)).optional(),
     priority: z.enum(getEnumValues(TaskPriority)).optional(),
     dueDate: z.string().datetime({ message: "Invalid date format" }).optional().or(z.literal("")).nullable(),
-    projectId: z.string().optional().nullable(),
+    projectId: z.string().refine((val) => mongoose.Types.ObjectId.isValid(val), 'Invalid Project ID format.').optional().nullable(),
     assignedTo: z.array(z.string().refine(val => mongoose.Types.ObjectId.isValid(val), "Invalid assignedTo ID format.")).optional().nullable(),
     cost: z.number().min(0, "Cost cannot be negative.").optional().nullable(),
     taskType: z.enum(getEnumValues(TaskType)).optional(),
@@ -92,7 +93,7 @@ export default defineEventHandler(async (event: H3Event) => {
 
   const validation = taskUpdateSchema.safeParse(body);
   if (!validation.success) {
-    console.error("Task update validation failed:", validation.error.format());
+    console.error("tasks.patch: Server-side validation failed:", validation.error.format());
     throw createError({
       statusCode: 400,
       message: "Invalid update data.",
@@ -121,17 +122,32 @@ export default defineEventHandler(async (event: H3Event) => {
     }
   }
 
-  if (updates.assignedTo !== undefined) {
+  let oldAssignedToIds = taskToUpdate.assignedTo ? taskToUpdate.assignedTo.map(id => String(id)) : [];
+  let newAssignedToIds: string[] = [];
+
+  if (updates.assignedTo !== undefined) { // If assignedTo is explicitly sent in the update payload
     if (updates.assignedTo === null || (Array.isArray(updates.assignedTo) && updates.assignedTo.length === 0)) {
       updatePayload.assignedTo = [];
+      newAssignedToIds = []; // No new assignments
     } else if (Array.isArray(updates.assignedTo)) {
-      updatePayload.assignedTo = updates.assignedTo.map(id => new mongoose.Types.ObjectId(id));
+      // Validate assigned users are Field Officers
+      const assignedUsers = await UserModel.find({ _id: { $in: updates.assignedTo } });
+      const invalidAssignedUsers = assignedUsers.filter(u => u.role !== UserRole.FieldOfficer);
+      if (invalidAssignedUsers.length > 0) {
+          throw createError({ statusCode: 400, message: `Cannot assign task to non-Field Officer users: ${invalidAssignedUsers.map(u => u.email).join(', ')}.` });
+      }
+      updatePayload.assignedTo = assignedUsers.map(u => u._id);
+      newAssignedToIds = assignedUsers.map(u => String(u._id));
     } else {
       throw createError({ statusCode: 400, message: "Invalid assignedTo format. Must be an array of user IDs." });
     }
+  } else {
+    // If assignedTo is not in the updates payload, newAssignedToIds should reflect current DB state
+    newAssignedToIds = oldAssignedToIds;
   }
 
   // --- TaskType and Location Update Logic ---
+  // Existing logic for taskType and location looks reasonable
   if (updates.taskType !== undefined) {
       updatePayload.taskType = updates.taskType;
   }
@@ -139,7 +155,7 @@ export default defineEventHandler(async (event: H3Event) => {
   if (updates.location !== undefined) {
       if (updatePayload.taskType === TaskType.Office || updates.location === null) {
           updatePayload.location = null;
-      } else if (updatePayload.taskType === TaskType.Field && updates.location) {
+      } else if ((updatePayload.taskType === TaskType.Field || taskToUpdate.taskType === TaskType.Field) && updates.location) { // Check both current or updated type
           if (updates.location.type === "Point" && updates.location.coordinates?.length === 2) {
               updatePayload.location = {
                   type: "Point",
@@ -148,23 +164,16 @@ export default defineEventHandler(async (event: H3Event) => {
           } else {
               throw createError({ statusCode: 400, message: "Invalid location data for Field task." });
           }
-      } else if (updates.taskType === undefined && updates.location) {
-          if (taskToUpdate.taskType === TaskType.Field) {
-               if (updates.location.type === "Point" && updates.location.coordinates?.length === 2) {
-                   updatePayload.location = {
-                       type: "Point",
-                       coordinates: [updates.location.coordinates[0], updates.location.coordinates[1]]
-                   };
-               } else {
-                   throw createError({ statusCode: 400, message: "Invalid location data for Field task (existing type)." });
-               }
-          } else {
-              throw createError({ statusCode: 400, message: "Cannot set location on an Office task without explicitly changing task type to Field." });
-          }
+      } else { // Attempt to set location on an Office task without changing type
+          throw createError({ statusCode: 400, message: "Cannot set location on an Office task without explicitly changing task type to Field." });
       }
-  } else if (updatePayload.taskType === TaskType.Office) {
+  } else if (updatePayload.taskType === TaskType.Office) { // If taskType becomes Office and no new location is provided, clear existing
       updatePayload.location = null;
+  } else if (updatePayload.taskType === undefined && updates.location === undefined) {
+      // If taskType isn't changing and location isn't specified, keep existing location
+      // No action needed here, it will default to taskToUpdate.location
   }
+
 
   // Remove `undefined` values from payload before sending to Mongoose to avoid unintended updates.
   Object.keys(updatePayload).forEach(key => {
@@ -177,10 +186,52 @@ export default defineEventHandler(async (event: H3Event) => {
     const updatedTaskDoc = await TaskModel.findByIdAndUpdate(taskId, updatePayload, {
       new: true,
       runValidators: true,
-    }).populate('projectId', 'name').lean();
+    }).populate('projectId', 'name')
+      .populate('userId', 'name email profilePhoto') // Populate author
+      .populate('assignedTo', 'name email profilePhoto role') // Populate for email & response
+      .lean();
 
     if (!updatedTaskDoc) {
       throw createError({ statusCode: 404, message: "Task not found after update attempt" });
+    }
+
+    // NEW: Send email notification if assignedTo changed
+    const assignedUserEmailsToSend: { name: string; email: string }[] = [];
+    const config = useRuntimeConfig();
+    const dashboardUrl = `${config.public.baseUrlPublic}/dashboard`;
+
+    // Determine who was newly assigned or unassigned
+    const newlyAssigned = newAssignedToIds.filter(id => !oldAssignedToIds.includes(id));
+    const unassigned = oldAssignedToIds.filter(id => !newAssignedToIds.includes(id));
+
+    if (newlyAssigned.length > 0) {
+        const newlyAssignedUsers = await UserModel.find({ _id: { $in: newlyAssigned } }).select('name email').lean();
+        await Promise.all(newlyAssignedUsers.map(async (assignedUser) => {
+            if (assignedUser.email) {
+                const emailHtml = getTaskAssignmentEmailHtml(
+                    assignedUser.name || assignedUser.email,
+                    updatedTaskDoc.title,
+                    dashboardUrl,
+                    ctxUser.name || ctxUser.email
+                );
+                try {
+                    await sendEmail({
+                        to: assignedUser.email,
+                        subject: `Taskforge: You've been assigned a task: "${updatedTaskDoc.title}"`,
+                        html: emailHtml,
+                        text: `Hello ${assignedUser.name || assignedUser.email},\nYou have been assigned a new task: "${updatedTaskDoc.title}" by ${ctxUser.name || ctxUser.email}.\nPlease log in to your Taskforge dashboard to view the details: ${dashboardUrl}`
+                    });
+                } catch (emailError) {
+                    console.error(`[API PATCH /tasks] Failed to send assignment email to ${assignedUser.email}:`, emailError);
+                }
+            }
+        }));
+    }
+
+    // Optionally, send notification to unassigned users (e.g., "Task removed from you")
+    if (unassigned.length > 0) {
+        // Implementation for unassigned notifications
+        console.log(`[API PATCH /tasks] Users unassigned: ${unassigned.join(', ')} from task: ${updatedTaskDoc.title}`);
     }
 
     const responseTask: ITask = new TaskModel(updatedTaskDoc).toJSON();
@@ -188,6 +239,7 @@ export default defineEventHandler(async (event: H3Event) => {
   } catch (error: any) {
     if (error.statusCode) { throw error; }
     if (error instanceof z.ZodError) {
+      console.error("tasks.patch: Server-side validation failed:", error.format());
       throw createError({
         statusCode: 400,
         message: "Server-side validation failed during task update.",
@@ -195,6 +247,7 @@ export default defineEventHandler(async (event: H3Event) => {
       });
     }
     if (error.name === 'ValidationError') {
+      console.error("tasks.patch: Mongoose validation failed:", error.message, error.errors);
       throw createError({
         statusCode: 400,
         message: error.message,

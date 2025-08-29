@@ -1,4 +1,4 @@
-<!-- components/form/AppInput.vue -->
+// components/form/AppInput.vue
 <template>
   <div class="space-y-1">
     <label
@@ -84,7 +84,6 @@ const emit = defineEmits<{
 }>();
 
 // FIX: Use Nuxt's built-in useId() for SSR-safe unique IDs.
-// This will resolve the hydration mismatch error.
 const inputId = useId();
 
 const inputClasses = computed(() => {

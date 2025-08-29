@@ -1,6 +1,6 @@
-// C:/Users/HomePC/taskforge-nuxt/server/db/models/user.ts
+// server/db/models/user.ts (UPDATED)
 import mongoose, { Schema, model, type Document } from "mongoose";
-import { UserRole } from "~/types/user";
+import { UserRole } from "~/types/user"; // Keep this import, as it defines UserRole
 import type { IUser } from "~/types/user";
 
 export interface IUserModel extends Document, Omit<IUser, 'id' | 'password' | 'createdAt' | 'updatedAt'> {
@@ -8,8 +8,8 @@ export interface IUserModel extends Document, Omit<IUser, 'id' | 'password' | 'c
   googleId?: string;
   role: UserRole;
   managedProjects: mongoose.Types.ObjectId[];
-  passwordResetToken?: string; // NEW: Field for storing password reset token
-  passwordResetExpires?: Date; // NEW: Field for storing password reset token expiry
+  passwordResetToken?: string;
+  passwordResetExpires?: Date;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -35,8 +35,8 @@ const userSchema = new Schema<IUserModel>(
       default: UserRole.FieldOfficer,
     },
     managedProjects: [{ type: Schema.Types.ObjectId, ref: 'Project' }],
-    passwordResetToken: String, // NEW: Schema field
-    passwordResetExpires: Date, // NEW: Schema field
+    passwordResetToken: String,
+    passwordResetExpires: Date,
   },
   {
     timestamps: true,
@@ -59,3 +59,6 @@ const userSchema = new Schema<IUserModel>(
 );
 
 export const UserModel = model<IUserModel>("User", userSchema);
+
+// CRITICAL FIX: Re-export UserRole so other files can import it from here.
+export { UserRole };

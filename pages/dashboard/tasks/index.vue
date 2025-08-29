@@ -1,4 +1,4 @@
-<!-- pages/dashboard/tasks.vue -->
+<!-- pages/dashboard/tasks.vue - FINAL CORRECTED -->
 <template>
   <div class="p-6">
     <div class="mb-6 flex items-center justify-between">
@@ -6,7 +6,8 @@
         <h1 class="text-2xl font-bold text-white">All Tasks</h1>
         <p class="text-slate-400">Manage and organize all your tasks</p>
       </div>
-      <FormAppButton @click="showCreateModal = true">
+      <!-- Changed to navigate to dashboard with query to open the Quick Add modal -->
+      <FormAppButton @click="navigateToDashboardAndOpenQuickAdd">
         <Icon name="heroicons:plus" class="mr-2 h-4 w-4" />
         Add Task
       </FormAppButton>
@@ -47,8 +48,6 @@
       </div>
     </div>
 
-    <!-- Removed DashboardFieldTasksMap for this page -->
-
     <div class="rounded-xl border border-slate-700 bg-slate-800">
       <div v-if="pending" class="flex justify-center p-12">
         <UiSpinner class="h-8 w-8 text-emerald-500" />
@@ -62,7 +61,6 @@
       </div>
 
       <div v-else class="p-4">
-        <!-- THE FIX: Correct v-if/v-else structure for TaskList -->
         <template v-if="filteredTasks.length === 0">
           <div class="text-center text-slate-400 py-8">
             No tasks found matching your criteria.
@@ -71,25 +69,22 @@
         <TaskList
           v-else
           :tasks="filteredTasks"
-          :selected-task-id="null"
           @task-updated="handleTaskUpdate"
           @task-deleted="handleTaskDelete"
           @edit-task="handleEditTask"
+          @task-selected="handleTaskSelected"
         />
       </div>
     </div>
 
+    <!-- Task Edit Modal - This remains here as it's for editing tasks directly from this list -->
     <TaskEditModal
-      v-if="editingTask"
+      v-model="showTaskEditModal"
       :task="editingTask"
       @save="handleSaveEdit"
-      @cancel="editingTask = null"
+      @cancel="closeTaskModal"
     />
-    <DashboardQuickAddTask
-      v-if="showCreateModal"
-      @task-created="handleTaskCreated"
-      @close="showCreateModal = false"
-    />
+    <!-- REMOVED: The DashboardQuickAddTask modal should NOT be here -->
   </div>
 </template>
 
@@ -97,10 +92,11 @@
 import { ref, type Ref, computed } from "vue";
 import { useTasks } from "~/composables/useTasks";
 import { TaskStatus, TaskType, type ITask } from "~/types/task";
-import VueToastification from 'vue-toastification';
-import DashboardQuickAddTask from '~/components/dashboard/QuickAddTask.vue';
+import { useAppToast } from '~/composables/useAppToast';
+// REMOVED: DashboardQuickAddTask import, as it's no longer used here
 import TaskEditModal from '~/components/TaskEditModal.vue';
-import TaskList from "~/components/TaskList.vue"; // Explicitly imported
+import TaskList from "~/components/TaskList.vue";
+import { useRouter } from '#app';
 
 definePageMeta({
   layout: "dashboard",
@@ -110,12 +106,14 @@ useSeoMeta({
   title: "All Tasks - TaskForge",
 });
 
+const toast = useAppToast();
+const router = useRouter();
 
-	const { useToast } = VueToastification;
 const { tasks, pending, error, refresh, updateTask, deleteTask } = useTasks();
 
-const showCreateModal = ref(false);
+// REMOVED: showCreateModal ref as it's no longer used here
 const editingTask: Ref<ITask | null> = ref(null);
+const showTaskEditModal = ref(false);
 
 const filterStatus = ref<TaskStatus | null>(null);
 const filterType = ref<TaskType | null>(null);
@@ -130,17 +128,36 @@ const filteredTasks = computed(() => {
   });
 });
 
+// NEW: Function to navigate to dashboard and open Quick Add modal
+const navigateToDashboardAndOpenQuickAdd = () => {
+  router.push({ path: '/dashboard', query: { quickadd: 'true' } });
+};
+
+// REMOVED: openCreateModal and closeCreateModal functions
+
 const handleTaskCreated = () => {
-  showCreateModal.value = false;
+  // This function would only be called if the modal was here, which it isn't.
+  // However, if tasks are created via the dashboard, this page's task list
+  // should refresh when it becomes active or via a global event.
   refresh();
-  toast.success("Task created!");
+  toast.add({
+    title: 'Task Created!',
+    description: 'Your new task has been successfully created.',
+    color: 'green',
+    icon: 'i-heroicons-check-circle',
+  });
 };
 
 const handleTaskUpdate = async (taskId: string, updates: Partial<ITask>) => {
   try {
     await updateTask(taskId, updates);
     refresh();
-    toast.success("Task updated!");
+    toast.add({
+      title: 'Task Updated',
+      description: 'Changes saved successfully.',
+      color: 'green',
+      icon: 'i-heroicons-check-circle',
+    });
   } catch (err: unknown) {
     const errorMessage = (err as any).data?.message || 'An unexpected error occurred.';
     toast.error(`Error updating task: ${errorMessage}`);
@@ -159,22 +176,35 @@ const handleTaskDelete = async (taskId: string) => {
   }
 };
 
-const handleEditTask = (taskId: string) => {
-  const foundTask = tasks.value?.find((t) => t.id === taskId);
-  if (foundTask) {
-    editingTask.value = foundTask;
-  }
+const handleEditTask = (taskToEdit: ITask) => {
+  editingTask.value = taskToEdit;
+  showTaskEditModal.value = true;
+};
+
+const handleTaskSelected = (task: ITask) => {
+  router.push(`/dashboard/tasks/${task.id}`);
 };
 
 const handleSaveEdit = async (taskId: string, updatedData: Partial<ITask>) => {
   try {
     await updateTask(taskId, updatedData);
-    editingTask.value = null;
-    refresh();
-    toast.success("Task saved!");
+    toast.add({
+      title: 'Task Saved',
+      description: 'Task updated successfully.',
+      color: 'green',
+      icon: 'i-heroicons-check-circle',
+    });
   } catch (err: unknown) {
     const errorMessage = (err as any).data?.message || 'An unexpected error occurred.';
     toast.error(`Error saving task: ${errorMessage}`);
+  } finally {
+    closeTaskModal();
+    refresh();
   }
+};
+
+const closeTaskModal = () => {
+  editingTask.value = null;
+  showTaskEditModal.value = false;
 };
 </script>

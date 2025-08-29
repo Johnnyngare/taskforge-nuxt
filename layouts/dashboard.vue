@@ -1,4 +1,4 @@
-<!-- layouts/dashboard.vue -->
+<!-- layouts/dashboard.vue - CORRECTED (ClientOnly removed from navigation) -->
 <template>
   <div class="flex h-screen bg-slate-900 text-slate-200">
     <!-- Mobile sidebar backdrop -->
@@ -31,6 +31,7 @@
       <!-- Main Navigation Links -->
       <nav class="mt-8 px-4">
         <div class="space-y-2">
+          <!-- REMOVED ClientOnly from around these links -->
           <NuxtLink
             to="/dashboard"
             class="flex items-center rounded-lg px-4 py-3 text-slate-300 transition-colors hover:bg-slate-800 hover:text-white"
@@ -58,7 +59,6 @@
             />
             Projects
           </NuxtLink>
-          <!-- NEW: Learning / SOPs Link -->
           <NuxtLink
             to="/dashboard/learning"
             class="flex items-center rounded-lg px-4 py-3 text-slate-300 transition-colors hover:bg-slate-800 hover:text-white"
@@ -103,6 +103,7 @@
               Admin Panel
             </NuxtLink>
           </template>
+          <!-- End of removed ClientOnly -->
         </div>
       </nav>
 
@@ -153,7 +154,7 @@
             <Icon name="heroicons:bars-3" class="h-6 w-6" />
           </button>
           <div class="flex-1 lg:flex-none">
-            <!-- This could be dynamically updated based on route in the future -->
+            <!-- This H1 might be dynamic based on current route if you add that logic -->
             <h1 class="text-2xl font-bold text-white">Dashboard</h1>
           </div>
           <div class="flex items-center space-x-4">
@@ -187,7 +188,6 @@
         </div>
       </header>
 
-      <!-- Page Content Slot -->
       <main class="flex-1 overflow-x-hidden overflow-y-auto p-4 sm:p-6 lg:p-8">
         <slot />
       </main>
@@ -198,11 +198,12 @@
 <script setup lang="ts">
 import { ref, onMounted, onUnmounted } from "vue";
 import { useColorMode } from "@vueuse/core";
-import { useAuth } from "~/composables/useAuth";
+import { useAuth } from "@/composables/useAuth";
+// No need for useRoute here if not directly reacting to route in layout script
 
 const sidebarOpen = ref(false);
 const colorMode = useColorMode();
-const { user, logout, isAdmin } = useAuth();
+const { user, logout, isAdmin } = useAuth(); // isAdmin from useAuth
 
 const toggleTheme = () => {
   colorMode.value = colorMode.value === "dark" ? "light" : "dark";
