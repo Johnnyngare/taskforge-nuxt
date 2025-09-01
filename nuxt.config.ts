@@ -1,4 +1,4 @@
-// nuxt.config.ts - UPDATED
+// nuxt.config.ts - CORRECTED
 import { defineNuxtConfig } from "nuxt/config";
 
 export default defineNuxtConfig({
@@ -44,17 +44,9 @@ export default defineNuxtConfig({
         (process.dev ? "http://localhost:3000" : "https://taskforge-nuxt.vercel.app"),
     },
   },
-  // Forced deploy for vue-toastification fix
-  // Remove the nitro.publicAssets configuration since we're using Vercel Blob
-  // nitro: {
-  //   publicAssets: [
-  //     {
-  //       baseURL: '/uploads',
-  //       dir: './uploads',
-  //       maxAge: 60 * 60 * 24 * 365,
-  //     }
-  //   ]
-  // },
+
+  // REMOVED: Incorrect imports configuration
+  // @nuxt/ui doesn't export useForm - this was causing the error
 
   ui: {
     global: true,

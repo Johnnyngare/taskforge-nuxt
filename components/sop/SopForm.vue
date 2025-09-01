@@ -1,34 +1,29 @@
-<!-- components/sop/SopForm.vue -->
+<!-- components/sop/SopForm.vue - CORRECTED -->
 <template>
-  <form @submit.prevent="handleSubmit" class="space-y-4 p-4">
-    <div>
-      <label for="title" class="block text-sm font-medium text-slate-300">Title</label>
-      <FormAppInput id="title" v-model="formState.title" required />
-    </div>
-    <div>
-      <label for="category" class="block text-sm font-medium text-slate-300">Category</label>
-      <FormAppInput id="category" v-model="formState.category" required />
-    </div>
-    <div>
-      <label for="tags" class="block text-sm font-medium text-slate-300">Tags (comma-separated)</label>
-      <FormAppInput id="tags" v-model="tagsInput" />
-    </div>
-    <div>
-      <label for="content" class="block text-sm font-medium text-slate-300">Content</label>
-      <textarea
+  <UForm :state="formState" :schema="sopClientSchema" @submit.prevent="handleSubmit" class="space-y-4 p-4">
+    <UFormGroup label="Title" for="title" required :error="formErrors.title" class="block text-sm font-medium text-slate-300">
+      <UInput id="title" v-model="formState.title" />
+    </UFormGroup>
+
+    <UFormGroup label="Category" for="category" required :error="formErrors.category" class="block text-sm font-medium text-slate-300">
+      <UInput id="category" v-model="formState.category" />
+    </UFormGroup>
+
+    <UFormGroup label="Tags (comma-separated)" for="tags" :error="formErrors.tags" class="block text-sm font-medium text-slate-300">
+      <UInput id="tags" v-model="tagsInput" />
+    </UFormGroup>
+
+    <UFormGroup label="Content" for="content" required :error="formErrors.content" class="block text-sm font-medium text-slate-300">
+      <UTextarea
         id="content"
         v-model="formState.content"
-        required
-        rows="10"
-        class="w-full rounded-lg border border-slate-600 bg-slate-700 px-3 py-2 text-slate-200 focus:border-emerald-500 focus:ring-emerald-500"
-      ></textarea>
-    </div>
+        :rows="10"
+        class="w-full"
+      />
+    </UFormGroup>
 
-    <!-- NEW: Attachments Section -->
     <div class="space-y-2">
       <h4 class="text-sm font-medium text-slate-300">Attachments</h4>
-
-      <!-- Existing Attachments (for Edit mode) -->
       <div v-if="initialData && initialData.attachments && initialData.attachments.length > 0" class="space-y-1">
         <p class="text-xs text-slate-400 mb-1">Existing files:</p>
         <div v-for="att in initialData.attachments" :key="att.id"
@@ -46,8 +41,6 @@
           </div>
         </div>
       </div>
-
-      <!-- New File Input -->
       <div>
         <label for="file-upload" class="block text-xs font-medium text-slate-400 mb-1">Add new files (Max 5 files, 10MB each):</label>
         <input id="file-upload" type="file" multiple @change="handleFileSelect"
@@ -60,8 +53,6 @@
         />
         <p v-if="fileErrors.length > 0" class="mt-1 text-xs text-rose-400">{{ fileErrors.join(' ') }}</p>
       </div>
-
-      <!-- List of files selected for upload -->
       <div v-if="filesToUpload.length > 0" class="space-y-1">
         <p class="text-xs text-slate-400 mb-1">Selected for upload:</p>
         <div v-for="(file, index) in filesToUpload" :key="file.name + file.size"
@@ -73,8 +64,6 @@
           </button>
         </div>
       </div>
-
-      <!-- List of attachments marked for deletion -->
       <div v-if="attachmentsToDelete.length > 0" class="space-y-1 text-rose-400 text-sm">
         <p class="text-xs mb-1">Marked for deletion (will be removed on save):</p>
         <span v-for="attId in attachmentsToDelete" :key="attId" class="inline-block bg-rose-500/10 rounded-full px-2 py-1 text-xs">
@@ -87,15 +76,16 @@
     </div>
 
     <div class="flex justify-end space-x-3 border-t border-slate-700 pt-4">
-      <FormAppButton type="button" variant="secondary" @click="$emit('cancel')">Cancel</FormAppButton>
-      <FormAppButton type="submit">Save SOP</FormAppButton>
+      <UButton type="button" variant="outline" @click="$emit('cancel')">Cancel</UButton>
+      <UButton type="submit">Save SOP</UButton>
     </div>
-  </form>
+  </UForm>
 </template>
 
 <script setup lang="ts">
-import { ref, watch, reactive } from 'vue';
-import type { ISop, ISopAttachment } from '~/types/sop';
+import { ref, watch, reactive, computed } from 'vue';
+import type { ISop } from '~/types/sop';
+import { z } from 'zod';
 
 type SopFormData = Omit<ISop, 'id' | 'author' | 'createdAt' | 'updatedAt' | 'attachments'>;
 
@@ -109,11 +99,27 @@ const emit = defineEmits<{
   (e: 'download-attachment', attachmentId: string, filename: string): void;
 }>();
 
-const formState = ref<SopFormData>({
+const sopClientSchema = z.object({
+  title: z.string().min(1, 'Title is required.'),
+  content: z.string().min(1, 'Content is required.'),
+  category: z.string().min(1, 'Category is required.'),
+  tags: z.array(z.string()).optional(),
+});
+
+// Simple reactive form state without external useForm
+const formState = reactive<SopFormData>({
   title: '',
   content: '',
   category: '',
   tags: [],
+});
+
+// Simple validation errors
+const formErrors = reactive<Record<string, string>>({
+  title: '',
+  content: '',
+  category: '',
+  tags: '',
 });
 
 const tagsInput = ref('');
@@ -125,38 +131,70 @@ const MAX_FILE_COUNT = 5;
 const MAX_FILE_SIZE_MB = 10;
 const ALLOWED_MIMES = [
   'application/pdf',
-  'application/msword', // .doc
-  'application/vnd.openxmlformats-officedocument.wordprocessingml.document', // .docx
-  'application/vnd.ms-excel', // .xls
-  'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', // .xlsx
-  'application/vnd.ms-powerpoint', // .ppt
-  'application/vnd.openxmlformats-officedocument.presentationml.presentation', // .pptx
+  'application/msword',
+  'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+  'application/vnd.ms-excel',
+  'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+  'application/vnd.ms-powerpoint',
+  'application/vnd.openxmlformats-officedocument.presentationml.presentation',
   'text/plain',
   'image/png',
   'image/jpeg',
   'image/jpg',
 ];
 
+// Clear validation errors
+const clearErrors = () => {
+  Object.keys(formErrors).forEach(key => {
+    formErrors[key] = '';
+  });
+};
+
+// Simple validation function
+const validateForm = () => {
+  clearErrors();
+  let isValid = true;
+
+  try {
+    sopClientSchema.parse(formState);
+  } catch (error) {
+    if (error instanceof z.ZodError) {
+      error.errors.forEach(err => {
+        const field = err.path[0] as string;
+        if (field in formErrors) {
+          formErrors[field] = err.message;
+          isValid = false;
+        }
+      });
+    }
+  }
+
+  return isValid;
+};
+
 watch(
   () => props.initialData,
   (sop) => {
     if (sop) {
-      formState.value = {
-        title: sop.title,
-        content: sop.content,
-        category: sop.category,
-        tags: sop.tags,
-      };
+      formState.title = sop.title;
+      formState.content = sop.content;
+      formState.category = sop.category;
+      formState.tags = sop.tags;
       tagsInput.value = sop.tags.join(', ');
       filesToUpload.value = [];
       attachmentsToDelete.value = [];
       fileErrors.value = [];
+      clearErrors();
     } else {
-      formState.value = { title: '', content: '', category: '', tags: [] };
+      formState.title = '';
+      formState.content = '';
+      formState.category = '';
+      formState.tags = [];
       tagsInput.value = '';
       filesToUpload.value = [];
       attachmentsToDelete.value = [];
       fileErrors.value = [];
+      clearErrors();
     }
   },
   { immediate: true }
@@ -208,8 +246,15 @@ const unmarkAttachmentForDeletion = (id: string) => {
   }
 };
 
-const handleSubmit = () => {
-  formState.value.tags = tagsInput.value.split(',').map(tag => tag.trim()).filter(Boolean);
-  emit('save', formState.value, filesToUpload.value, attachmentsToDelete.value);
+const handleSubmit = async () => {
+  if (!validateForm()) {
+    console.log("Client-side validation failed:", formErrors);
+    return;
+  }
+
+  // Process tags from input
+  formState.tags = tagsInput.value.split(',').map(tag => tag.trim()).filter(Boolean);
+
+  emit('save', { ...formState }, filesToUpload.value, attachmentsToDelete.value);
 };
 </script>

@@ -1,9 +1,8 @@
-<!-- pages/dashboard/learning/index.vue -->
+<!-- pages/dashboard/learning/index.vue - UPDATED -->
 <template>
   <div>
     <div class="flex items-center justify-between">
       <h1 class="text-3xl font-bold text-slate-200">Learning & SOPs</h1>
-      <!-- THE FIX: Use canManageSOPs directly for the button visibility -->
       <FormAppButton v-if="canManageSOPs" @click="openCreateModal">
         <Icon name="heroicons:plus" class="mr-2 h-4 w-4" />
         Add New SOP
@@ -39,7 +38,7 @@
                 {{ sop.title }}
               </h3>
               <p class="mt-2 text-sm text-slate-400">
-                Authored by: {{ sop.author.name }} on
+                Authored by: {{ sop.author?.name || 'Unknown User' }} on   <!-- FIX HERE -->
                 {{ new Date(sop.createdAt).toLocaleDateString() }}
               </p>
             </NuxtLink>
@@ -48,7 +47,6 @@
                 class="rounded-full bg-slate-700 px-2 py-1 text-xs font-medium text-slate-300"
                 >{{ sop.category }}</span
               >
-              <!-- THE FIX: Use canManageSOPs for conditional display of CRUD buttons -->
               <div v-if="canManageSOPs" class="flex">
                 <button
                   @click="openEditModal(sop)"
@@ -71,7 +69,6 @@
       </ul>
     </div>
 
-    <!-- The Add/Edit Modal -->
     <SopEditModal v-model="isModalOpen" :sop="editingSop" />
   </div>
 </template>
@@ -88,11 +85,7 @@ definePageMeta({
 });
 
 const { sops, pending, error, deleteSop } = useSops();
-// THE FIX: Destructure canManageSOPs directly from useAuth
-const { isAdmin, isManager, canManageSOPs } = useAuth();
-
-// Removed the local 'canManage' computed property as 'canManageSOPs' is now directly available.
-// const canManage = computed(() => isAdmin.value || isManager.value);
+const { canManageSOPs } = useAuth();
 
 const isModalOpen = ref(false);
 const editingSop = ref<ISop | null>(null);

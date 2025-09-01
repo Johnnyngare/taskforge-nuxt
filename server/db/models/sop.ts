@@ -1,5 +1,4 @@
-// server/db/models/sop.ts
-
+// server/db/models/sop.ts - UPDATED
 import mongoose, { Schema, model, type Document } from 'mongoose';
 import type { ISop, ISopAttachment } from '~/types/sop';
 
@@ -26,6 +25,7 @@ const SopAttachmentSchema = new Schema<ISopAttachment>(
 export interface ISopModel extends Document, Omit<ISop, 'id' | 'author' | 'attachments'> {
   authorId: mongoose.Types.ObjectId;
   attachments: ISopAttachment[];
+  isGlobal?: boolean; // NEW FIELD: To mark SOPs as globally accessible/default
 }
 
 const SopSchema = new Schema<ISopModel>(
@@ -36,6 +36,7 @@ const SopSchema = new Schema<ISopModel>(
     tags: { type: [String], index: true },
     authorId: { type: Schema.Types.ObjectId, ref: 'User', required: true },
     attachments: { type: [SopAttachmentSchema], default: [] },
+    isGlobal: { type: Boolean, default: false }, // NEW: Default to false
   },
   {
     timestamps: true,
@@ -55,10 +56,6 @@ const SopSchema = new Schema<ISopModel>(
         } else { // Should not happen if authorId is required
           ret.author = null;
         }
-
-        // --- Crucial: Ensure attachments are simply passed through ---
-        // If 'attachments' is a direct schema field, it will be in 'ret' automatically.
-        // DO NOT delete ret.attachments here.
 
         delete ret._id;
         delete ret.__v;
