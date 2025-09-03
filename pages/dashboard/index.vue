@@ -198,7 +198,6 @@ onMounted(() => {
 });
 
 const handleTaskSelect = (task: ITask) => {
-  // This is for dashboard/map interaction, not the edit modal
   // If a field task, trigger map focus and invalidateSize
   if (task.taskType === TaskType.Field && fieldMapRef.value) {
     fieldMapRef.value.focusOnTask(task);

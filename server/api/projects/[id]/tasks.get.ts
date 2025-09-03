@@ -1,6 +1,5 @@
 // server/api/projects/[id]/tasks.get.ts
 import { defineEventHandler, createError } from "h3";
-// FIX: Remove .ts extension from import
 import { TaskModel } from "~/server/db/models/task";
 
 export default defineEventHandler(async (event) => {

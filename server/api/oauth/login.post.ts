@@ -46,7 +46,7 @@ export default defineEventHandler(async (event) => {
     console.log("[API POST /auth/login] Auth token cookie set successfully.");
 
     const userResponse = user.toJSON();
-    delete userResponse.password; // Ensure password is removed from response
+    delete userResponse.password; 
 
     return {
       statusCode: 200,

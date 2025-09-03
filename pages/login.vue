@@ -162,11 +162,10 @@
 import { z } from "zod";
 import { reactive, ref } from "vue";
 import { useAuth } from "~/composables/useAuth";
-// OLD: import { useToast } from "vue-toastification"; // Assuming you use this for notifications
 // NEW: CRITICAL FIX - Use your custom useAppToast composable
 import { useAppToast } from "~/composables/useAppToast"; 
 
-const toast = useAppToast(); // <--- CORRECTLY CALL THE COMPOSABLE
+const toast = useAppToast(); 
 
 useSeoMeta({
   title: "Sign In - TaskForge",

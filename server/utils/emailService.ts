@@ -1,88 +1,51 @@
-// server/utils/emailService.ts - UPDATED for Mailtrap in dev
-import sgMail from '@sendgrid/mail';
-import nodemailer from 'nodemailer'; // NEW: Import Nodemailer
+import nodemailer from "nodemailer";
+import { useRuntimeConfig } from '#imports';
 
-const runtimeConfig = useRuntimeConfig(); // Access runtime config
+export async function sendEmail({ to, subject, html, text }: { to: string; subject: string; html: string; text: string }) {
+  // Access the runtime config within the function
+  const config = useRuntimeConfig();
+  
+  // Use Nuxt's built-in process.dev flag to determine the environment
+  const isDev = process.dev;
 
-// Set SendGrid API Key for production
-if (process.env.NODE_ENV === 'production') {
-    if (!runtimeConfig.private.sendgridApiKey) {
-        console.error('SENDGRID_API_KEY is not set in production environment!');
-    } else {
-        sgMail.setApiKey(runtimeConfig.private.sendgridApiKey);
-    }
+  // Conditionally select the correct configuration from runtimeConfig
+  const transporterConfig = {
+    host: isDev ? config.email.mailtrapHost : config.email.gmailHost,
+    port: isDev ? config.email.mailtrapPort : config.email.gmailPort,
+    secure: false, // Typically false for port 587
+    auth: {
+      user: isDev ? config.email.mailtrapUser : config.email.gmailUser,
+      pass: isDev ? config.email.mailtrapPass : config.email.gmailPass,
+    },
+  };
+
+  const transporter = nodemailer.createTransport(transporterConfig);
+
+  // Send the email using the sender info from the runtime config
+  await transporter.sendMail({
+    from: `"${config.email.fromName}" <${config.email.fromEmail}>`,
+    to,
+    subject,
+    text,
+    html,
+  });
 }
 
-// Nodemailer transporter for development (Mailtrap)
-let devTransporter: nodemailer.Transporter | null = null;
-if (process.env.NODE_ENV !== 'production') {
-    // Check if Mailtrap creds are available
-    if (runtimeConfig.private.mailtrapHost && runtimeConfig.private.mailtrapPort &&
-        runtimeConfig.private.mailtrapUser && runtimeConfig.private.mailtrapPass) {
-        devTransporter = nodemailer.createTransport({
-            host: runtimeConfig.private.mailtrapHost,
-            port: Number(runtimeConfig.private.mailtrapPort), // Ensure port is number
-            auth: {
-                user: runtimeConfig.private.mailtrapUser,
-                pass: runtimeConfig.private.mailtrapPass,
-            },
-            // optional: allow self-signed certs for local dev (if needed, but usually not for Mailtrap)
-            // tls: { rejectUnauthorized: false }
-        });
-        console.log('[EmailService] Mailtrap transporter configured for development.');
-    } else {
-        console.warn('[EmailService] Mailtrap credentials incomplete. Emails will NOT be sent in development.');
-    }
-}
-
-
-export const sendEmail = async (options: { to: string; subject: string; html: string; text: string; from?: string }) => {
-    const fromEmail = options.from || 'no-reply@taskforge.com'; // Default sender email
-
-    if (process.env.NODE_ENV === 'production') {
-        if (!runtimeConfig.private.sendgridApiKey) {
-            console.error('[EmailService] Production email failed: SENDGRID_API_KEY is missing.');
-            throw new Error('Email service not configured for production.');
-        }
-        await sgMail.send({ ...options, from: fromEmail });
-        console.log(`[EmailService] Production email sent to ${options.to}`);
-    } else {
-        // Development email via Mailtrap
-        if (devTransporter) {
-            await devTransporter.sendMail({
-                from: fromEmail,
-                to: options.to,
-                subject: options.subject,
-                html: options.html,
-                text: options.text,
-            });
-            console.log(`[EmailService] Development email sent to ${options.to} via Mailtrap.`);
-        } else {
-            console.warn(`[EmailService] Skipping email to ${options.to} in development. Mailtrap not configured.`);
-        }
-    }
-};
-
-// Your existing getTaskAssignmentEmailHtml function
-export const getTaskAssignmentEmailHtml = (
-    recipientName: string,
-    taskTitle: string,
-    dashboardUrl: string,
-    assignerName: string
-) => {
-    return `
-    <div style="font-family: Arial, sans-serif; line-height: 1.6; color: #333; max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #ddd; border-radius: 8px;">
-      <h2 style="color: #059669;">Taskforge: New Task Assignment</h2>
-      <p>Hello ${recipientName},</p>
-      <p>You have been assigned a new task: <strong>"${taskTitle}"</strong> by ${assignerName}.</p>
-      <p>Please log in to your Taskforge dashboard to view the details and start working on it.</p>
-      <p style="text-align: center; margin-top: 30px;">
-        <a href="${dashboardUrl}" style="display: inline-block; padding: 10px 20px; background-color: #059669; color: #ffffff; text-decoration: none; border-radius: 5px;">View Task in Dashboard</a>
-      </p>
-      <p>If you have any questions, please contact ${assignerName}.</p>
-      <p>Thanks,<br/>The Taskforge Team</p>
-      <hr style="border: none; border-top: 1px solid #eee; margin-top: 20px;">
-      <p style="font-size: 0.8em; color: #777;">This email was sent by Taskforge. Please do not reply directly to this email.</p>
+// This helper function does not need any changes
+export function getTaskAssignmentEmailHtml(
+  assignedUserName: string,
+  taskTitle: string,
+  dashboardUrl: string,
+  assignedBy: string
+): string {
+  return `
+    <div style="font-family: Arial, sans-serif; color: #333;">
+      <h2>New Task Assignment</h2>
+      <p>Hello <strong>${assignedUserName}</strong>,</p>
+      <p>You have been assigned a new task: <strong>${taskTitle}</strong>.</p>
+      <p>Assigned by: <strong>${assignedBy}</strong></p>
+      <p>Please log in to your <a href="${dashboardUrl}" target="_blank">Taskforge Dashboard</a> to view the details.</p>
+      <p>Thank you,<br/>Taskforge Team</p>
     </div>
-    `;
-};
+  `;
+}
